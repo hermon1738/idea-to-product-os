@@ -1,0 +1,32 @@
+version: '3.8'
+
+# Idea-to-Product OS — Agent Orchestration
+# Run all agents with: docker-compose up -d
+# Stop all: docker-compose down
+
+services:
+  session-scribe:
+    build: ../agents/session-scribe
+    container_name: session-scribe
+    restart: unless-stopped
+    env_file: ~/.ai-agents.env
+    environment:
+      - DOCS_PATH=/app/docs
+    volumes:
+      - ~/ai-agents/docs:/app/docs
+
+  org-schema-formatter:
+    build: ../agents/org-schema-formatter
+    container_name: org-schema-formatter
+    restart: unless-stopped
+    env_file: ~/.ai-agents.env
+
+  assignment-dispatcher:
+    build: ../agents/assignment-dispatcher
+    container_name: assignment-dispatcher
+    restart: unless-stopped
+    env_file: ~/.ai-agents.env
+
+# To add a new agent:
+# 1. Add a new service block following the pattern above
+# 2. Run: docker-compose up -d --build [agent-name]

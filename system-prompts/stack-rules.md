@@ -10,8 +10,12 @@
 - Base image: `python:3.11-slim`
 - `ENV PYTHONUNBUFFERED=1` required in every Dockerfile
 - Secrets: `os.environ` loaded from `--env-file ~/ai-agents/.env`
-- Repo: `hermon1738/ai-agents`
-- Path pattern: `~/ai-agents/agents/[agent-name]/agent.py + Dockerfile`
+- Deploy repo: `hermon1738/ai-agents` — agent files only, no build tools
+- Build repo: project-specific (e.g., `redit-monitor`) — bricklayer,
+  docs, system prompts, skeptic packets live here
+- Build path: `agents/[agent-name]/agent.py + Dockerfile` (relative
+  to project repo root)
+- Deploy path: `~/ai-agents/agents/[agent-name]/` on VPS
 
 ## Excluded Platforms (never recommend)
 Vercel, Railway, Render, Oracle Free Tier, any serverless platform.
@@ -53,12 +57,18 @@ Exception: only if the task is explicitly stateless and one-time.
 Every agent build must follow this sequence — no exceptions:
 
 ```
-1. Build → test locally
-2. Deploy → docker run on VPS
-3. Verify → docker logs [agent-name] confirms it's live
-4. Push → git push to hermon1738/ai-agents
-5. Log → !scribe in Discord
+1. Build → write agent files to agents/[agent-name]/ in project repo
+2. Test → gate passes in bricklayer locally (skeptic PASS from human)
+3. Copy → copy agents/[agent-name]/ into hermon1738/ai-agents/agents/
+4. Push → git push hermon1738/ai-agents
+5. Pull → git pull on Hetzner VPS
+6. Deploy → docker run on VPS using --env-file ~/ai-agents/.env
+7. Verify → docker logs [agent-name] confirms it's live
+8. Log → !scribe in Discord
 ```
+Never write agent files directly to ~/ai-agents/ during development.
+Build repo is for building. Deploy repo is for running. Never mix them.
+Claude Code always writes to the project repo path, never to ~/ai-agents/.
 
 VPS is not a backup. If you deploy without pushing, the code only
 exists on one machine. Push every time.

@@ -65,7 +65,9 @@ everything else is reference.
 
 Output a single ready-to-paste block for the current brick.
 This is what Tony sends directly to Claude Code — no editing required.
-
+- Claude Code NEVER writes skeptic_verdict.md.
+  Step 7 is always: STOP. Post skeptic packet. Wait for human verdict.
+  Step 8 only runs after human confirms PASS.
 ---
 📋 CLAUDE CODE — BRICK [N]: [Name]
 

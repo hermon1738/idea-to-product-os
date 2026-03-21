@@ -24,6 +24,8 @@ Required sequence:
 
 Always run verify before tests.
 
+Exception: single-file doc edits with no code and no tests may skip the pipeline with explicit Tony approval. All other work goes through the full sequence.
+
 Final report format (must match exactly):
 
 SUMMARY:

@@ -61,6 +61,38 @@ State exactly which brick to start with and what the implementer
 needs to begin. This is the only output Tony acts on immediately —
 everything else is reference.
 
+### 6. CLAUDE CODE HANDOFF
+
+Output a single ready-to-paste block for the current brick.
+This is what Tony sends directly to Claude Code — no editing required.
+
+---
+📋 CLAUDE CODE — BRICK [N]: [Name]
+
+Load: bricklayer/PROMPTS/BUILDER_PROMPT.md
+
+Brick contract:
+  What:        [one sentence]
+  Input:       [what it needs]
+  Output:      [what it produces]
+  Gate:        [how to verify]
+  Blocker:     [what breaks if this fails]
+  Files:       [exact file paths to create/edit]
+  Tests:       [what tests must pass — happy path + edge cases]
+
+Execute the full Bricklayer sequence:
+  1. python3 bricklayer/tools/print_brick_contract.py
+  2. python3 bricklayer/tools/verify_files_touched.py --snapshot-init
+  3. Implement — only files listed above
+  4. python3 bricklayer/tools/verify_files_touched.py
+  5. python3 bricklayer/tools/run_tests_and_capture.py
+  6. python3 bricklayer/tools/make_skeptic_packet.py
+  7. Write skeptic_verdict.md → Verdict: PASS
+  8. python3 bricklayer/tools/update_state.py --complete
+
+Do not proceed past any step that fails.
+Report gate result when done.
+
 ---
 
 ## GATE TYPES
@@ -81,3 +113,5 @@ everything else is reference.
 - If a dependency is missing, flag it before proceeding.
 - Output the FIRST BRICK prominently — that's what gets acted on.
 - After each brick is completed, run sprint-brain.md for review.
+- Always output the CLAUDE CODE HANDOFF block for the active brick.
+  This block must be self-contained — Claude Code needs nothing else to start.

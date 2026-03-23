@@ -1,0 +1,14 @@
+phases:
+  audit:    system-prompts/repo-auditor.md
+  venture:  system-prompts/venture-os.md
+  agent:    system-prompts/agent-os.md
+  plan:     system-prompts/plan-brain.md
+  review:   system-prompts/sprint-brain.md
+
+tools:
+  verify:   bricklayer/tools/verify_files_touched.py
+  test:     bricklayer/tools/run_tests_and_capture.py
+  skeptic:  bricklayer/tools/make_skeptic_packet.py
+  state:    bricklayer/tools/update_state.py
+
+agents: {}

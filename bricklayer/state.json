@@ -1,18 +1,14 @@
 {
-  "current_brick": "Brick 4 - Add deterministic skeptic packet generator",
+  "current_brick": "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation",
   "status": "COMPLETED",
   "loop_count": 0,
   "last_gate_failed": null,
   "completed_bricks": [
-    "Brick 0 - Smoke test loop",
-    "Brick 1 - Add multiply function",
-    "Brick 2 - Add subtract function",
-    "Brick 3 - Make src a proper package + stabilize imports",
-    "Brick 4 - Add deterministic skeptic packet generator"
+    "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation"
   ],
   "next_action": "Select and prepare next brick",
   "last_test_run": {
-    "command": "python3 -m pytest -q",
+    "command": "python3 -m pytest -q ../tests/",
     "status": "PASS",
     "exit_code": 0,
     "artifact": "skeptic_packet/test_output.txt",

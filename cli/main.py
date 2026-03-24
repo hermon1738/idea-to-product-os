@@ -7,7 +7,16 @@ from typing import Optional
 import typer
 
 from cli.config import find_yaml, load_and_validate
-from cli.commands.build import run_build, run_skeptic_packet, run_snapshot, run_verify, run_test, run_verdict
+from cli.commands.branch import run_branch
+from cli.commands.build import (
+    _get_current_branch,
+    run_build,
+    run_skeptic_packet,
+    run_snapshot,
+    run_verify,
+    run_test,
+    run_verdict,
+)
 from cli.commands.next import run_next
 from cli.commands.status import run_status
 
@@ -35,6 +44,20 @@ def status() -> None:
 
 
 @app.command()
+def branch(
+    number: Optional[str] = typer.Argument(None, help="Brick number (e.g. 9)."),
+    name: Optional[str] = typer.Argument(None, help="Branch name slug."),
+    feature: bool = typer.Option(False, "--feature", help="Create a feature/ branch."),
+) -> None:
+    """Create and checkout a brick/N-name or feature/name branch."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_branch(yaml_path.parent, number, name, feature))
+
+
+@app.command()
 def build(
     snapshot: bool = typer.Option(False, "--snapshot", help="Run snapshot-init tool."),
     verify: bool = typer.Option(False, "--verify", help="Run verify-files tool."),
@@ -48,6 +71,13 @@ def build(
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
     root = yaml_path.parent
+
+    # Guard: refuse to operate on main
+    current_branch = _get_current_branch(root)
+    if current_branch == "main":
+        typer.echo("You are on main. Create a branch first:")
+        typer.echo("  bricklayer branch [N] [name]")
+        raise typer.Exit(code=1)
 
     has_verdict = verdict is not None
     active = sum([snapshot, verify, test, skeptic_packet]) + (1 if has_verdict else 0)

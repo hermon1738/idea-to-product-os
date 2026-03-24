@@ -8,6 +8,7 @@ import typer
 
 from cli.config import find_yaml, load_and_validate
 from cli.commands.branch import run_branch
+from cli.commands.commit import run_commit
 from cli.commands.build import (
     _get_current_branch,
     run_build,
@@ -43,6 +44,23 @@ def status() -> None:
         raise typer.Exit(code=1)
     exit_code = run_status(yaml_path.parent)
     raise typer.Exit(code=exit_code)
+
+
+@app.command()
+def commit(
+    message: Optional[str] = typer.Option(None, "-m", "--message", help="Commit message."),
+) -> None:
+    """Commit staged files with auto-tagged brick ID message."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    if message is None:
+        typer.echo(
+            "Commit message required: bricklayer commit -m 'your message'", err=True
+        )
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_commit(yaml_path.parent, message))
 
 
 @app.command()

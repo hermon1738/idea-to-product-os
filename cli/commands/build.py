@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as _json
 import re
+import subprocess as _subprocess
 from pathlib import Path
 from typing import Any
 
@@ -183,6 +184,62 @@ def run_skeptic_packet(root: Path, config: dict[str, Any]) -> int:
     return 0
 
 
+def _parse_brick_name(spec_text: str) -> str:
+    """Extract brick name from 'BRICK: ...' line in spec.md."""
+    for line in spec_text.splitlines():
+        if line.startswith("BRICK:"):
+            return line[len("BRICK:"):].strip()
+    return "unknown brick"
+
+
+def _parse_spec_files(spec_text: str) -> list[str]:
+    """Return the FILES list from spec.md."""
+    files: list[str] = []
+    in_files = False
+    for line in spec_text.splitlines():
+        stripped = line.strip()
+        if stripped == "FILES:":
+            in_files = True
+            continue
+        if in_files and stripped.endswith(":") and not line.startswith(" "):
+            break
+        if in_files and stripped.startswith("-"):
+            files.append(stripped[1:].strip())
+    return files
+
+
+def _git_commit_spec(root: Path, brick_name: str, files: list[str]) -> tuple[int, str]:
+    """Stage spec FILES and commit with standard message. Returns (exit_code, output)."""
+    add = _subprocess.run(
+        ["git", "add", "--"] + files,
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if add.returncode != 0:
+        return add.returncode, add.stdout or ""
+
+    m = re.match(r"Brick\s+([\d.]+)\s*[-\u2013]\s*(.*)", brick_name, re.IGNORECASE)
+    if m:
+        num, desc = m.group(1), m.group(2).strip()
+        subject = f"feat(brick-{num}): {desc}"
+    else:
+        subject = f"feat(brick): {brick_name}"
+
+    msg = f"{subject}\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+    commit = _subprocess.run(
+        ["git", "commit", "-m", msg],
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    return commit.returncode, commit.stdout or ""
+
+
 def run_verdict(root: Path, config: dict[str, Any], verdict_value: str) -> int:
     """Run --verdict PASS|FAIL. Closes or fails the current brick."""
     if verdict_value not in ("PASS", "FAIL"):
@@ -209,6 +266,20 @@ def run_verdict(root: Path, config: dict[str, Any], verdict_value: str) -> int:
         verdict_path = root / VERDICT_RELPATH
         verdict_path.write_text("Verdict: PASS\n", encoding="utf-8")
         typer.echo(f"written: {verdict_path}")
+
+        # Auto-commit spec FILES before advancing state so prior-brick files
+        # never pollute the next brick's verify step.
+        spec_path = root / SPEC_RELPATH
+        if spec_path.exists():
+            spec_text = spec_path.read_text(encoding="utf-8")
+            brick_name = _parse_brick_name(spec_text)
+            spec_files = _parse_spec_files(spec_text)
+            commit_exit, commit_output = _git_commit_spec(root, brick_name, spec_files)
+            if commit_output:
+                typer.echo(commit_output, nl=False)
+            if commit_exit != 0:
+                typer.echo("error: git commit failed — state not advanced", err=True)
+                return 1
 
         tool_path = get_tool_path(config, "state", root)
         if tool_path is None:

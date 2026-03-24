@@ -73,6 +73,34 @@ def write_test_output() -> tuple[Path, int]:
     return dst, proc.returncode
 
 
+def _get_git_root() -> "Path | None":
+    """Return the absolute repo root, or None if not in a git repo."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return Path(proc.stdout.strip())
+    return None
+
+
+def _git_add_spec_files(git_root: Path, files: list[str]) -> None:
+    """Stage all spec FILES in the git index before building the packet."""
+    if not files:
+        return
+    subprocess.run(
+        ["git", "add", "--"] + files,
+        cwd=str(git_root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
 def is_git_repo() -> bool:
     if shutil.which("git") is None:
         return False
@@ -183,6 +211,12 @@ def write_scoped_files_bundle() -> tuple[Path, Path]:
 
 def main() -> int:
     PACKET_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Auto-stage all spec FILES before building packet so new files appear in diff
+    if is_git_repo():
+        git_root = _get_git_root()
+        if git_root is not None:
+            _git_add_spec_files(git_root, parse_scoped_files())
 
     written_spec = write_spec_copy()
     written_state = write_state_excerpt()

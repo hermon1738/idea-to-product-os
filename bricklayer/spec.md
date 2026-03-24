@@ -1,83 +1,73 @@
-BRICK: Brick 8 - bricklayer build --verdict PASS|FAIL
+BRICK: Brick 8.5 - git fixes (auto-stage + auto-commit on verdict)
 
 WHAT:
-  --verdict PASS|FAIL closes or fails the current brick.
-  PASS: writes bricklayer/skeptic_verdict.md with "Verdict: PASS",
-  then runs update_state.py --complete.
-  FAIL: increments loop_count in state.json; if loop_count reaches
-  or already equals 3, prints RESCOPE and exits 1 without advancing.
-  Guard: refuses to run if next_action != skeptic_packet_ready.
+  Two permanent fixes to the git workflow:
+  1. make_skeptic_packet.py reads spec.md FILES section and runs
+     git add on every listed file before building the packet.
+     New files are never invisible to the skeptic diff.
+  2. bricklayer build --verdict PASS runs git commit on all files
+     in spec.md FILES after update_state.py --complete succeeds.
+     Prior brick files never pollute the next brick's verify step.
 
 INPUT:
-  state.json (loop_count, next_action), update_state.py (state key
-  in bricklayer.yaml). Verdict value is PASS or FAIL.
+  bricklayer/tools/make_skeptic_packet.py (modified — auto git add),
+  cli/commands/build.py (modified — auto git commit on PASS),
+  bricklayer/spec.md FILES section (source of truth for current brick).
 
 OUTPUT:
-  PASS: skeptic_verdict.md written, update_state.py --complete runs,
-  state advances. Exit 0.
-  FAIL (loop_count < 3): loop_count incremented, blocker printed, exit 1.
-  FAIL (loop_count reaches/is >= 3): RESCOPE printed, exit 1.
-  Invalid value: error printed, exit 1.
-  Wrong next_action: guard error printed, exit 1.
+  make_skeptic_packet.py auto-stages all spec FILES before building
+  the packet. bricklayer build --verdict PASS auto-commits all spec
+  FILES using commit format: "feat(brick-N): [brick name]" with
+  Co-Authored-By trailer. Exit 0 on success; exit 1 if commit fails
+  with clear error, state not advanced.
 
 GATE:
-  RUNS — PASS writes skeptic_verdict.md and runs update_state tool.
-  FAIL increments loop_count correctly. loop_count=3 triggers RESCOPE
-  with no state advance. No raw traceback on any error path.
+  RUNS — make_skeptic_packet.py stages all spec FILES before diff.
+  --verdict PASS creates a git commit containing all spec FILES.
+  Commit message matches stack-rules format. State advances only
+  after commit succeeds. No raw traceback on any error path.
 
 BLOCKER:
-  Nothing downstream in MVP. Completes the build loop.
+  Every Phase 3 brick will hit both issues without this fix.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
+- bricklayer/tools/make_skeptic_packet.py
 - cli/commands/build.py
-- cli/main.py
-- tests/test_build_verdict.py
+- tests/test_git_fixes.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) PASS path
-- next_action=skeptic_packet_ready → skeptic_verdict.md written with
-  "Verdict: PASS", update_state.py --complete invoked, exit 0.
+1) Auto-stage (make_skeptic_packet.py)
+- Runs git add on every file listed in spec.md FILES before building
+  the packet. New/untracked files listed in FILES are staged.
+- Files NOT in spec.md FILES are NOT staged by the tool.
 
-2) FAIL path — normal
-- next_action=skeptic_packet_ready, loop_count < 2 → loop_count
-  incremented by 1, blocker message printed, exit 1.
+2) Auto-commit on PASS verdict
+- --verdict PASS: after update_state.py --complete succeeds, reads
+  spec.md FILES, runs git commit with message
+  "feat(brick-N): [brick name]" and Co-Authored-By trailer.
+- git log shows a new commit containing all spec FILES.
+- state.json advances (next_action updated by update_state.py).
 
-3) FAIL path — RESCOPE triggered (reaches 3)
-- loop_count=2 → increments to 3, RESCOPE printed, exit 1.
+3) Auto-commit failure handling
+- If git commit exits non-zero (e.g. nothing to commit), --verdict
+  PASS prints clear error and exits 1. State is not advanced.
 
-4) FAIL path — already at loop_count=3
-- loop_count=3 → hard stop: RESCOPE printed, exit 1, state unchanged.
-
-5) Guard
-- next_action != skeptic_packet_ready → guard error, exit 1,
-  nothing written, state not modified.
-
-6) Missing loop_count key
-- loop_count absent from state.json → treated as 0, no traceback.
-
-7) Invalid verdict value
-- --verdict with value other than PASS or FAIL → error, exit 1.
-
-8) CliRunner integration
-- --verdict PASS: exit 0, skeptic_verdict.md written.
-- --verdict FAIL: exit 1, loop_count incremented.
+4) CliRunner integration
+- --verdict PASS via CliRunner: commit created, state advanced.
 
 TEST REQUIREMENTS:
-- PASS: verdict.md written with "Verdict: PASS", run_tool called, exit 0
-- FAIL loop_count=1 → increments to 2, exit 1, next_action unchanged
-- FAIL loop_count=2 → increments to 3, RESCOPE in output, exit 1
-- FAIL loop_count=3 → RESCOPE, exit 1, state unchanged
-- Guard: wrong next_action → error, exit 1, no writes
-- Missing loop_count key → fallback to 0, exit 1, no traceback
-- Invalid verdict value → error, exit 1
-- CliRunner: PASS → exit 0, verdict.md exists
-- CliRunner: FAIL → exit 1, loop_count incremented
+- auto-stage: new file in spec FILES is staged by make_skeptic_packet.py
+- auto-stage: file not in spec FILES is not staged
+- auto-commit PASS: git log shows new commit with spec FILES
+- auto-commit PASS: state.json next_action advances
+- auto-commit failure: git commit failure → exit 1, state not advanced
+- CliRunner: --verdict PASS → commit created, state advanced
 
 OUT OF SCOPE:
-- Writing handover.md (that is update_state.py's responsibility)
-- Any other --complete behavior beyond invoking the tool
-- All prior v2 debt items
+- Changing FAIL path behavior
+- Changing loop_count / RESCOPE logic
+- Any behavior not listed above

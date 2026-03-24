@@ -1,97 +1,70 @@
-BRICK: Brick 14 - three-level branching upgrade
+BRICK: Brick 15 - documentation update (three-level branching)
 
 WHAT:
-  Upgrade branching from two levels (brick/feature) to three
-  levels (feature → phase → brick). Add --phase flag to
-  bricklayer branch. Add bricklayer close-phase and
-  bricklayer close-feature commands. Update --verdict PASS
-  merge routing to detect current branch level and merge to
-  the correct parent.
+  Update README.md to replace the two-level branching section
+  with the full three-level model, add the two new commands,
+  add a branching hierarchy diagram, update the build loop
+  section, and add a parallel features section.
 
 INPUT:
-  cli/commands/branch.py, cli/commands/build.py, cli/main.py,
-  state.json
+  README.md (current), all Brick 14 shipped commands
 
 OUTPUT:
-  BRANCH CREATION:
-    bricklayer branch --feature reddit-monitor
-      → creates feature/reddit-monitor from main
-    bricklayer branch --phase 1 scaffold
-      → creates phase/1-scaffold from current feature/* branch
-    bricklayer branch 14 three-level-branching
-      → creates brick/14-three-level-branching from current
-        phase/* branch
-
-  VERDICT PASS ROUTING:
-    brick/* → merges to current_phase from state.json
-    phase/* → merges to current_feature from state.json
-    feature/* → merges to main
-
-  NEW COMMANDS:
-    bricklayer close-phase
-    bricklayer close-feature
-
-  STATE TRACKING:
-    state.json gains current_feature and current_phase fields
+  README.md updated with:
+  1. Branching model section with ASCII diagram
+  2. Updated command reference for --phase, close-phase,
+     close-feature
+  3. Updated build loop section using three-level model
+  4. Parallel features section
+  5. No references to old two-level model
 
 GATE:
-  RUNS — full three-level flow test
+  OUTPUTS — manual read-through confirming all criteria.
 
 BLOCKER:
-  Phase 4 multi-project commands assume this branching model.
+  Nothing.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/branch.py
-- cli/commands/build.py
-- cli/commands/close_phase.py
-- cli/commands/close_feature.py
-- cli/main.py
-- tests/test_three_level_branch.py
-- tests/test_branch.py
+- README.md
+- bricklayer/Readme.md
+- bricklayer/state.json
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) Feature branch
-- Created from main; error if not on main; state updated.
+1) Branching model section
+- ASCII diagram shows main → feature → phase → brick hierarchy.
 
-2) Phase branch
-- Created from feature/*; error if not on feature/*; state updated.
+2) Command reference
+- bricklayer branch --feature <name>
+- bricklayer branch --phase N <name>
+- bricklayer branch N <name> (from phase/*)
+- bricklayer close-phase
+- bricklayer close-feature
+All present with descriptions and examples.
 
-3) Brick branch
-- Created from phase/*; error if not on phase/*; state updated.
+3) Build loop
+- Shows full session using three-level model.
 
-4) Verdict PASS routing
-- brick/* → merge to current_phase; phase/* → merge to
-  current_feature; feature/* → merge to main.
+4) Parallel features
+- Explains how two features run as independent branches.
 
-5) close-phase
-- Merges phase/* → current_feature, deletes branch, updates state.
+5) No old two-level references
+- Zero mentions of old two-level model.
 
-6) close-feature
-- Merges feature/* → main, deletes branch, updates state.
+6) No placeholder text
+- Zero TODO, TBD, or template boilerplate.
 
-7) Error cases
-- Wrong parent → clear error, exit 1, no state change.
-- Git failures → clear error, exit 1, no traceback.
-
-8) State fields
-- current_feature and current_phase track correctly through
-  full three-level flow.
+7) No phantom features
+- Only commands that currently exist.
 
 TEST REQUIREMENTS:
-- Feature/phase/brick creation happy paths
-- Wrong parent errors for all three levels
-- Verdict PASS routing for all three levels
-- close-phase and close-feature happy paths
-- close-phase/close-feature wrong branch errors
-- State field updates through full flow
-- Git failures → exit 1, no traceback
-- CliRunner integration
+- No automated tests.
+- Gate: manual read-through + pytest -q must show 408 passing.
 
 OUT OF SCOPE:
-- Modifying state.py schema validation
-- Changes to bricklayer.yaml structure
-- Any Phase 4 commands
+- Any code changes
+- API reference
+- Changelog

@@ -380,6 +380,3 @@ Large bricks fail.
 
 When in doubt, reduce scope.
 
-
-***I built this shit. Me. Brick by brick. And I'll be damned if I let you tear it down just because you don't like the way another [N!\*\*@] talks!!!***
-

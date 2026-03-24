@@ -184,6 +184,62 @@ def run_skeptic_packet(root: Path, config: dict[str, Any]) -> int:
     return 0
 
 
+def _get_current_branch(root: Path) -> str | None:
+    """Return the current git branch name, or None on failure."""
+    proc = _subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return proc.stdout.strip()
+    return None
+
+
+def _merge_brick_branch(root: Path, branch_name: str) -> tuple[int, str]:
+    """Checkout main, merge branch with --no-ff, delete branch.
+
+    Returns (exit_code, message). On failure, message is human-readable.
+    """
+    checkout = _subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if checkout.returncode != 0:
+        return checkout.returncode, (
+            f"error: git checkout main failed: {checkout.stdout.strip()}"
+        )
+
+    merge = _subprocess.run(
+        ["git", "merge", "--no-ff", branch_name],
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if merge.returncode != 0:
+        return merge.returncode, (
+            f"error: git merge --no-ff {branch_name} failed: {merge.stdout.strip()}"
+        )
+
+    _subprocess.run(
+        ["git", "branch", "-d", branch_name],
+        cwd=str(root),
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.PIPE,
+        check=False,
+    )
+    return 0, f"Merged {branch_name} → main. Branch deleted."
+
+
 def _parse_brick_name(spec_text: str) -> str:
     """Extract brick name from 'BRICK: ...' line in spec.md."""
     for line in spec_text.splitlines():
@@ -280,6 +336,19 @@ def run_verdict(root: Path, config: dict[str, Any], verdict_value: str) -> int:
             if commit_exit != 0:
                 typer.echo("error: git commit failed — state not advanced", err=True)
                 return 1
+
+        # Auto-merge brick branches; feature branches stay open
+        current_branch = _get_current_branch(root)
+        if current_branch is not None and current_branch.startswith("brick/"):
+            merge_code, merge_msg = _merge_brick_branch(root, current_branch)
+            typer.echo(merge_msg)
+            if merge_code != 0:
+                typer.echo("error: git merge failed — state not advanced", err=True)
+                return 1
+        elif current_branch is not None and current_branch.startswith("feature/"):
+            typer.echo(
+                "Feature branch open. Merge to main when all bricks in this feature pass."
+            )
 
         tool_path = get_tool_path(config, "state", root)
         if tool_path is None:

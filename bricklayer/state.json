@@ -1,12 +1,12 @@
 {
-  "current_brick": "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation",
-  "status": "COMPLETED",
+  "current_brick": "Brick 8.6 - branching workflow",
+  "status": "IN_PROGRESS",
   "loop_count": 0,
   "last_gate_failed": null,
   "completed_bricks": [
     "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation"
   ],
-  "next_action": "Select and prepare next brick",
+  "next_action": "skeptic_packet_ready",
   "last_test_run": {
     "command": "python3 -m pytest -q ../tests/",
     "status": "PASS",

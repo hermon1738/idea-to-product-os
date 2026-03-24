@@ -1,110 +1,280 @@
-# Idea-to-Product OS
+# bricklayer-cli
 
-A tool-independent operating system for running AI-powered companies.
-Take any business idea from concept to deployed agents doing real work.
-
----
-
-## What This Is
-
-Idea-to-Product OS is a system of prompts, workflows, and live agents
-that turns a business idea into a running organization — with AI agents
-handling recurring operational work and a human overseeing approvals.
-
-It is not tied to any single AI tool. The system prompts are plain
-markdown files. Use Claude, GPT-4, Gemini, Codex — the workflow
-rules stay the same regardless of tool.
+A Python CLI that enforces the Bricklayer build pipeline — a gated, brick-by-brick
+software delivery workflow. Each brick has a written contract, a scoped file list,
+a test gate, an independent skeptic review, and a hard close step before the next
+brick begins. The CLI automates the bookkeeping so the workflow rules are checked
+by the tool, not by memory.
 
 ---
 
-## The Three Layers
+## Install
 
+```bash
+git clone <repo-url>
+cd idea-to-product-os
+pip install -e .
+bricklayer --help
 ```
-LAYER 1 — SYSTEM PROMPTS (AI-agnostic)
-  Markdown files that define how each phase works.
-  Load them into any AI chat to activate that phase.
 
-LAYER 2 — BRICKLAYER BLUEPRINT (build engine)
-  Tool-independent workflow for building software brick by brick.
-  Includes an independent Skeptic review system — a different AI
-  reviews every brick before it ships. No self-validation.
+Requires Python 3.9+. Dependencies (`typer`, `pyyaml`) are installed automatically.
 
-LAYER 3 — LIVE AGENTS (running infrastructure)
-  Discord bots deployed on a VPS via Docker.
-  Handle recurring tasks, logging, and pipeline automation.
+For `bricklayer close-session`, also install the Groq client:
+
+```bash
+pip install groq==0.11.0
 ```
 
 ---
 
-## The Pipeline
+## bricklayer.yaml
 
+`bricklayer.yaml` lives at the repo root and declares where your system prompt files
+and pipeline tools are. The CLI walks up from the current directory to find it.
+
+Minimal working example:
+
+```yaml
+phases:
+  review: system-prompts/sprint-brain.md
+
+tools:
+  verify: bricklayer/tools/verify_files_touched.py
+  test:   bricklayer/tools/run_tests_and_capture.py
+  skeptic: bricklayer/tools/make_skeptic_packet.py
+  state:  bricklayer/tools/update_state.py
+
+agents: {}
 ```
-Entry Point A: GitHub repo to evaluate  → Start at Phase 1
-Entry Point B: Original idea            → Start at Phase 2
-Entry Point C: Know what to build       → Start at Phase 3
-Entry Point D: Have a spec ready        → Start at Phase 4
-```
 
-| Phase | Tool | What It Does |
-|-------|------|-------------|
-| 1 | Repo Auditor | Evaluates GitHub repos, outputs Agent spec or Project Brief |
-| 2 | Venture OS | Co-CEO strategy session, stress-tests the idea, outputs Org Schema |
-| 3 | Agent-OS | Designs agent hierarchy, outputs Bricklayer briefs |
-| 4 | Bricklayer / plan-brain | Breaks work into bricks with gates |
-| 5 | Implement | Builder AI codes the brick |
-| 5b | Skeptic Review | Different AI reviews the brick via skeptic-gate.md |
-| 6 | Sprint Review | sprint-brain reviews what shipped, outputs next brick |
-| 7 | Session Scribe | Logs every session to decision-log.md automatically |
-
-**Rule: start as early in the pipeline as you can afford to.
-Venture OS takes 10 minutes. Building the wrong thing takes days.**
+All paths are relative to `bricklayer.yaml`. The CLI exits 1 with a clear error if
+any declared path does not exist.
 
 ---
 
-## Repository Structure
+## Commands
+
+### `bricklayer status`
+
+Prints the current brick, last action, and next command from `bricklayer/state.json`.
 
 ```
-idea-to-product-os/
-├── README.md                  ← this file
-├── docs/
-│   ├── vision.md              ← the full system vision
-│   ├── pipeline.md            ← phase-by-phase breakdown
-│   ├── architecture.md        ← how all layers connect
-│   └── getting-started.md     ← set up on a new machine
-├── system-prompts/            ← load into any AI chat
-│   ├── venture-os.md
-│   ├── agent-os.md
-│   ├── repo-auditor.md
-│   └── stack-rules.md
-├── bricklayer/                ← full Bricklayer Blueprint
-│   ├── README.md
-│   ├── WORKFLOW.md
-│   ├── skeptic-gate.md
-│   ├── PROMPTS/
-│   └── tools/
-├── agents/                    ← see hermon1738/ai-agents
-│   └── README.md
-└── infrastructure/
-    ├── docker-compose.yml
-    └── env.example
+$ bricklayer status
+project:     idea-to-product-os
+phase:       (STATE.md not found)
+brick:       Brick 12 - bricklayer close-session
+last action: Tests PASS (exit 0)
+next:        skeptic_packet_ready
 ```
 
 ---
 
-## Related Repositories
+### `bricklayer next`
 
-| Repo | Purpose |
-|------|---------|
-| [hermon1738/ai-agents](https://github.com/hermon1738/ai-agents) | Live deployed agents (Session Scribe, org-schema-formatter, assignment-dispatcher) |
-| [hermon1738/Bricklayer_blueprint](https://github.com/hermon1738/Bricklayer_blueprint) | Bricklayer Blueprint source |
+Prints the single next CLI command to run based on `state.json`. Use this when
+resuming mid-brick and you need to know where you left off.
+
+```
+$ bricklayer next
+bricklayer build --verdict PASS|FAIL
+```
 
 ---
 
-## Core Principles
+### `bricklayer branch`
 
-- **Small bricks pass. Large bricks fail.** When in doubt, reduce scope.
-- **No self-validation.** The AI that builds a brick cannot review it.
-- **Log everything.** Empty decision logs = context loss at scale.
-- **Fill capacity before adding infra.** Don't add new services when existing ones can handle the load.
-- **Human gates on irreversible actions.** Deployments and external communications require human approval.
-- **Push to GitHub after every deploy.** The VPS is not a backup.
+Creates and checks out a `brick/N-name` or `feature/name` branch, and records it
+in `state.json`.
+
+```bash
+# Start a brick branch
+bricklayer branch 13 readme-update
+# → branch: brick/13-readme-update
+
+# Start a feature branch
+bricklayer branch --feature my-feature
+# → branch: feature/my-feature
+```
+
+---
+
+### `bricklayer build`
+
+Runs pipeline tools or prints the brick contract. Refuses to run on `main` — create
+a branch first.
+
+```bash
+bricklayer build                  # Print brick contract from spec.md
+bricklayer build --snapshot       # Run snapshot-init (capture baseline file state)
+bricklayer build --verify         # Run verify_files_touched.py (scope check)
+bricklayer build --test           # Run test suite via run_tests_and_capture.py
+bricklayer build --skeptic-packet # Generate skeptic_packet/ evidence bundle
+bricklayer build --verdict PASS   # Record verdict, auto-commit, auto-merge to main
+bricklayer build --verdict FAIL   # Record FAIL verdict, exit 1
+```
+
+`--verdict PASS` on a `brick/` branch:
+1. Writes `bricklayer/skeptic_verdict.md`
+2. Auto-commits all files declared in `spec.md FILES`
+3. Merges the branch to `main` with `--no-ff` and deletes it
+4. Runs `update_state.py --complete`
+
+`--verdict PASS` on a `feature/` branch commits and records the verdict but does
+not merge — feature branches are merged manually.
+
+---
+
+### `bricklayer commit`
+
+Commits staged files with an auto-formatted brick ID message. Use this for
+mid-brick checkpoints between the snapshot and verify steps.
+
+```bash
+git add path/to/file.py
+bricklayer commit -m "add input validation"
+```
+
+Output commit message format:
+
+```
+feat(brick-13): add input validation
+
+Brick: 13 — readme update
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+Exits 1 if nothing is staged, if `-m` is omitted, or if the message is empty.
+
+---
+
+### `bricklayer pause`
+
+Writes `HANDOFF.json` and `.continue-here.md` at the repo root. Run this before
+ending a session so the next session can pick up exactly where you left off.
+
+```bash
+bricklayer pause
+# written: HANDOFF.json
+# written: .continue-here.md
+```
+
+`HANDOFF.json` captures: project, brick number, brick name, last action, loop
+count, current branch, timestamp, and next command.
+
+---
+
+### `bricklayer resume`
+
+Reads `HANDOFF.json` and prints a formatted context block for session restart.
+If the current branch does not match the branch recorded in `HANDOFF.json`, a
+warning is printed but the command still exits 0.
+
+```
+$ bricklayer resume
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESUMING SESSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Project:       idea-to-product-os
+Branch:        brick/13-readme-update
+Brick:         13 — readme update
+Last action:   snapshot_init
+Loop count:    0
+Timestamp:     2026-03-24T10:00:00+00:00
+Next command:  bricklayer build --snapshot
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
+### `bricklayer close-session`
+
+Calls the Groq API to run a sprint review using `system-prompts/sprint-brain.md`
+as the system prompt and the current `state.json` as the user message. Writes the
+output to `session-log.md` and updates `STATE.md`.
+
+Requires `GROQ_API_KEY` in the environment:
+
+```bash
+export GROQ_API_KEY=gsk_...
+bricklayer close-session
+# Session closed. Next session:
+#   bricklayer resume
+```
+
+Exits 1 with a clear error if `GROQ_API_KEY` is missing, `state.json` is not
+found, `sprint-brain.md` is not at the path declared in `bricklayer.yaml`, or
+the Groq API call fails. No files are written on failure.
+
+---
+
+## The Build Loop
+
+A complete brick follows this 8-step sequence:
+
+```
+1. bricklayer branch N name
+   → creates brick/N-name, records branch in state.json
+
+2. Update bricklayer/spec.md with the brick contract
+   (FILES list, ACCEPTANCE CRITERIA, TEST REQUIREMENTS)
+
+3. bricklayer build --snapshot
+   → captures baseline file state before any edits
+
+4. Implement — touch only files listed in spec.md FILES
+
+5. bricklayer build --verify
+   → exits 1 if any edited file is not in spec.md FILES
+
+6. bricklayer build --test
+   → runs test suite, updates state.json, appends to handover.md
+
+7. bricklayer build --skeptic-packet
+   → generates skeptic_packet/ evidence bundle for review
+
+8. bricklayer build --verdict PASS
+   → writes verdict, auto-commits, merges to main, closes brick
+```
+
+If any step exits 1, stop. Do not advance to the next step until the gate passes.
+
+The skeptic review (between steps 7 and 8) must be done by a different AI than
+the one that built the brick. The builder cannot approve its own output.
+
+---
+
+## Known Limitations (v2 debt)
+
+These are real gaps in the current implementation. They do not block normal use
+but are worth knowing before hitting them.
+
+**`null` in `state.json` current_brick causes a crash in `bricklayer commit`.**
+`state.get("current_brick", "")` does not guard against a JSON `null` value. If
+`current_brick` is explicitly set to `null`, the regex call will raise a
+`TypeError`. Workaround: keep `current_brick` as a string.
+
+**`bricklayer commit` gives a misleading error when run outside a git repository.**
+If the working directory is not a git repo, `_check_staged` returns an empty list
+and the user sees "Nothing staged. Use git add first." instead of a not-a-git-repo
+error.
+
+**`session-log.md` is overwritten on every `close-session` run.**
+There is no append mode or timestamped archive. Each run replaces the previous log.
+Commit `session-log.md` to source control before closing a second session if you
+need the history.
+
+**`close-session` blocks on network failure.**
+If the Groq API is unreachable (DNS failure, rate limit, network partition), the
+command fails and no files are written. There is no offline fallback or retry.
+The Groq error string is surfaced as-is; HTTP 429 (rate limit) and
+prompt-too-large errors do not produce targeted guidance.
+
+**`bricklayer build --verdict PASS` auto-merge can fail on conflict.**
+If `main` has diverged from the brick branch since branching, the `--no-ff` merge
+will fail. The state is not advanced, but the working tree may be left on `main`.
+Resolve the conflict manually and re-run `--verdict PASS`.
+
+**`bricklayer.yaml` validation runs on every command.**
+The config loader validates all declared paths on startup. If a path is missing
+(e.g. a system prompt file was deleted), every command exits 1 until fixed — even
+commands that do not use that path.

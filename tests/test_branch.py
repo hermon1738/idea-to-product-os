@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
 from cli.commands.branch import _git_create_checkout, _slugify, run_branch  # noqa: E402
 from cli.commands.build import (  # noqa: E402
     _get_current_branch,
-    _merge_brick_branch,
+    _merge_branch_to,
     run_verdict,
 )
 from cli.main import app  # noqa: E402
@@ -70,7 +70,13 @@ def _make_project(
 ) -> Path:
     brick_dir = tmp_path / "bricklayer"
     brick_dir.mkdir(exist_ok=True)
-    state = {**_BASE_STATE, "next_action": next_action, "current_branch": current_branch}
+    state = {
+        **_BASE_STATE,
+        "next_action": next_action,
+        "current_branch": current_branch,
+        "current_feature": "feature/test",
+        "current_phase": "phase/1-test",
+    }
     (brick_dir / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
     (brick_dir / "spec.md").write_text(_SPEC_TEXT, encoding="utf-8")
     return tmp_path
@@ -144,7 +150,8 @@ def test_run_branch_brick_creates_correct_name(tmp_path: Path) -> None:
     """brick/N-name is constructed from number + slugified name."""
     _make_project(tmp_path)
 
-    with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+    with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+         patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
         result = run_branch(tmp_path, "9", "bricklayer-pause", feature=False)
 
     assert result == 0
@@ -154,7 +161,8 @@ def test_run_branch_brick_updates_state(tmp_path: Path) -> None:
     """current_branch is written to state.json."""
     _make_project(tmp_path)
 
-    with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+    with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+         patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
         run_branch(tmp_path, "9", "bricklayer pause", feature=False)
 
     assert _read_state(tmp_path)["current_branch"] == "brick/9-bricklayer-pause"
@@ -166,7 +174,8 @@ def test_run_branch_brick_prints_branch_name(
     """Output contains the created branch name."""
     _make_project(tmp_path)
 
-    with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+    with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+         patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
         run_branch(tmp_path, "9", "bricklayer-pause", feature=False)
 
     assert "brick/9-bricklayer-pause" in capsys.readouterr().out
@@ -177,7 +186,8 @@ def test_run_branch_brick_missing_number_exits_one(
 ) -> None:
     """Missing number → error, exit 1."""
     _make_project(tmp_path)
-    result = run_branch(tmp_path, None, "some-name", feature=False)
+    with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"):
+        result = run_branch(tmp_path, None, "some-name", feature=False)
     assert result == 1
     assert "Traceback" not in capsys.readouterr().err
 
@@ -185,7 +195,8 @@ def test_run_branch_brick_missing_number_exits_one(
 def test_run_branch_brick_missing_name_exits_one(tmp_path: Path) -> None:
     """Missing name → error, exit 1."""
     _make_project(tmp_path)
-    result = run_branch(tmp_path, "9", None, feature=False)
+    with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"):
+        result = run_branch(tmp_path, "9", None, feature=False)
     assert result == 1
 
 
@@ -198,7 +209,8 @@ def test_run_branch_feature_creates_correct_name(tmp_path: Path) -> None:
     """feature/name is constructed when --feature is set."""
     _make_project(tmp_path)
 
-    with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+    with patch("cli.commands.branch._get_current_branch", return_value="main"), \
+         patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
         result = run_branch(tmp_path, "session-management", None, feature=True)
 
     assert result == 0
@@ -208,7 +220,8 @@ def test_run_branch_feature_updates_state(tmp_path: Path) -> None:
     """current_branch is set to feature/name in state.json."""
     _make_project(tmp_path)
 
-    with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+    with patch("cli.commands.branch._get_current_branch", return_value="main"), \
+         patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
         run_branch(tmp_path, "session-management", None, feature=True)
 
     assert _read_state(tmp_path)["current_branch"] == "feature/session-management"
@@ -217,7 +230,8 @@ def test_run_branch_feature_updates_state(tmp_path: Path) -> None:
 def test_run_branch_feature_missing_name_exits_one(tmp_path: Path) -> None:
     """--feature with no name → error, exit 1."""
     _make_project(tmp_path)
-    result = run_branch(tmp_path, None, None, feature=True)
+    with patch("cli.commands.branch._get_current_branch", return_value="main"):
+        result = run_branch(tmp_path, None, None, feature=True)
     assert result == 1
 
 
@@ -284,13 +298,13 @@ def test_get_current_branch_returns_none_on_failure(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _merge_brick_branch
+# _merge_branch_to
 # ---------------------------------------------------------------------------
 
 
 def test_merge_brick_branch_returns_zero_on_success(tmp_path: Path) -> None:
     with patch("cli.commands.build._subprocess.run", side_effect=_mock_git_success):
-        code, msg = _merge_brick_branch(tmp_path, "brick/9-test")
+        code, msg = _merge_branch_to(tmp_path, "brick/9-test", "main")
     assert code == 0
     assert "brick/9-test" in msg
     assert "main" in msg
@@ -298,7 +312,7 @@ def test_merge_brick_branch_returns_zero_on_success(tmp_path: Path) -> None:
 
 def test_merge_brick_branch_returns_one_on_checkout_failure(tmp_path: Path) -> None:
     with patch("cli.commands.build._subprocess.run", side_effect=_mock_git_fail):
-        code, msg = _merge_brick_branch(tmp_path, "brick/9-test")
+        code, msg = _merge_branch_to(tmp_path, "brick/9-test", "main")
     assert code == 1
     assert "Traceback" not in msg
 
@@ -309,7 +323,7 @@ def test_merge_brick_branch_returns_one_on_merge_failure(tmp_path: Path) -> None
     def side_effect(cmd, **kwargs):
         call_count[0] += 1
         m = MagicMock()
-        if call_count[0] == 1:  # git checkout main — success
+        if call_count[0] == 1:  # git checkout target — success
             m.returncode = 0
             m.stdout = ""
         else:  # git merge — fail
@@ -318,7 +332,7 @@ def test_merge_brick_branch_returns_one_on_merge_failure(tmp_path: Path) -> None
         return m
 
     with patch("cli.commands.build._subprocess.run", side_effect=side_effect):
-        code, msg = _merge_brick_branch(tmp_path, "brick/9-test")
+        code, msg = _merge_branch_to(tmp_path, "brick/9-test", "main")
 
     assert code == 1
     assert "Traceback" not in msg
@@ -326,7 +340,7 @@ def test_merge_brick_branch_returns_one_on_merge_failure(tmp_path: Path) -> None
 
 def test_merge_brick_branch_message_format(tmp_path: Path) -> None:
     with patch("cli.commands.build._subprocess.run", side_effect=_mock_git_success):
-        _, msg = _merge_brick_branch(tmp_path, "brick/9-test")
+        _, msg = _merge_branch_to(tmp_path, "brick/9-test", "main")
     assert "Merged brick/9-test → main" in msg
     assert "Branch deleted" in msg
 
@@ -349,8 +363,8 @@ def _mock_get_branch(name: str):
     return side_effect
 
 
-def test_verdict_pass_brick_branch_merges_to_main(tmp_path: Path) -> None:
-    """PASS on brick/* calls _merge_brick_branch."""
+def test_verdict_pass_brick_branch_merges_to_phase(tmp_path: Path) -> None:
+    """PASS on brick/* merges to current_phase from state.json."""
     root = _make_project(tmp_path, current_branch="brick/8.6-branching-workflow")
     merged = []
 
@@ -375,7 +389,7 @@ def test_verdict_pass_brick_branch_merges_to_main(tmp_path: Path) -> None:
 def test_verdict_pass_brick_branch_prints_merge_message(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """PASS on brick/* prints merge confirmation."""
+    """PASS on brick/* prints merge confirmation with phase target."""
     root = _make_project(tmp_path)
 
     with patch("cli.commands.build._subprocess.run", side_effect=_mock_get_branch("brick/8.6-test")):
@@ -384,13 +398,13 @@ def test_verdict_pass_brick_branch_prints_merge_message(
 
     out = capsys.readouterr().out
     assert "Merged" in out
-    assert "main" in out
+    assert "phase/1-test" in out
 
 
-def test_verdict_pass_feature_branch_no_merge(
+def test_verdict_pass_feature_branch_merges_to_main(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """PASS on feature/* does NOT merge; prints feature message."""
+    """PASS on feature/* merges to main."""
     root = _make_project(tmp_path)
     merge_calls = []
 
@@ -407,9 +421,9 @@ def test_verdict_pass_feature_branch_no_merge(
             result = run_verdict(root, _CONFIG_WITH_STATE, "PASS")
 
     assert result == 0
-    assert not merge_calls
+    assert len(merge_calls) == 1
     out = capsys.readouterr().out
-    assert "Feature branch open" in out
+    assert "Merged" in out
 
 
 def test_verdict_pass_feature_branch_state_advances(tmp_path: Path) -> None:
@@ -582,7 +596,8 @@ def test_cli_branch_brick_exits_zero(tmp_path: Path) -> None:
     old_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+        with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+             patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
             result = cli_runner.invoke(app, ["branch", "9", "bricklayer-pause"])
     finally:
         os.chdir(old_cwd)
@@ -595,7 +610,8 @@ def test_cli_branch_brick_output_contains_branch_name(tmp_path: Path) -> None:
     old_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+        with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+             patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
             result = cli_runner.invoke(app, ["branch", "9", "bricklayer-pause"])
     finally:
         os.chdir(old_cwd)
@@ -608,7 +624,8 @@ def test_cli_branch_feature_exits_zero(tmp_path: Path) -> None:
     old_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+        with patch("cli.commands.branch._get_current_branch", return_value="main"), \
+             patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
             result = cli_runner.invoke(app, ["branch", "--feature", "session-management"])
     finally:
         os.chdir(old_cwd)
@@ -621,7 +638,8 @@ def test_cli_branch_feature_output_contains_branch_name(tmp_path: Path) -> None:
     old_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_success):
+        with patch("cli.commands.branch._get_current_branch", return_value="main"), \
+             patch("cli.commands.branch._git_create_checkout", return_value=(0, "")):
             result = cli_runner.invoke(app, ["branch", "--feature", "session-management"])
     finally:
         os.chdir(old_cwd)
@@ -634,7 +652,8 @@ def test_cli_branch_already_exists_exits_one(tmp_path: Path) -> None:
     old_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
-        with patch("cli.commands.branch._subprocess.run", side_effect=_mock_git_fail):
+        with patch("cli.commands.branch._get_current_branch", return_value="phase/1-test"), \
+             patch("cli.commands.branch._git_create_checkout", return_value=(1, "already exists")):
             result = cli_runner.invoke(app, ["branch", "9", "test"])
     finally:
         os.chdir(old_cwd)

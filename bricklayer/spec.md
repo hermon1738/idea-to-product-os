@@ -1,59 +1,97 @@
-BRICK: Brick 13 - README + documentation update
+BRICK: Brick 14 - three-level branching upgrade
 
 WHAT:
-  Update README.md to accurately reflect what exists after
-  Phases 1-3. A developer who has never seen this repo should
-  be able to clone, install, and run bricklayer status in
-  under 5 minutes by following the README alone.
+  Upgrade branching from two levels (brick/feature) to three
+  levels (feature → phase → brick). Add --phase flag to
+  bricklayer branch. Add bricklayer close-phase and
+  bricklayer close-feature commands. Update --verdict PASS
+  merge routing to detect current branch level and merge to
+  the correct parent.
 
 INPUT:
-  All shipped code (Bricks 1-12), bricklayer.yaml, existing
-  README.md
+  cli/commands/branch.py, cli/commands/build.py, cli/main.py,
+  state.json
 
 OUTPUT:
-  README.md covering:
-  1. What bricklayer-cli is — one paragraph, no hype
-  2. Install steps: git clone → pip install -e . → bricklayer --help
-  3. bricklayer.yaml setup — what it is, minimal working example
-  4. Every working command with one-line description and example output
-  5. The build loop — how a full brick sequence works end to end
-  6. Known limitations (v2 debt) — honest list of what doesn't work yet
+  BRANCH CREATION:
+    bricklayer branch --feature reddit-monitor
+      → creates feature/reddit-monitor from main
+    bricklayer branch --phase 1 scaffold
+      → creates phase/1-scaffold from current feature/* branch
+    bricklayer branch 14 three-level-branching
+      → creates brick/14-three-level-branching from current
+        phase/* branch
+
+  VERDICT PASS ROUTING:
+    brick/* → merges to current_phase from state.json
+    phase/* → merges to current_feature from state.json
+    feature/* → merges to main
+
+  NEW COMMANDS:
+    bricklayer close-phase
+    bricklayer close-feature
+
+  STATE TRACKING:
+    state.json gains current_feature and current_phase fields
 
 GATE:
-  OUTPUTS — read the README cold as if you have never seen this
-  repo. Confirm: install steps work from scratch, every command
-  listed exists and runs, no references to features that don't
-  exist yet, no placeholder text remaining.
+  RUNS — full three-level flow test
 
 BLOCKER:
-  Nothing. Ships before Phase 4 adds more commands to document.
+  Phase 4 multi-project commands assume this branching model.
 
 WAVE:
-  PARALLEL
+  SEQUENTIAL
 
 FILES:
-- README.md
+- cli/commands/branch.py
+- cli/commands/build.py
+- cli/commands/close_phase.py
+- cli/commands/close_feature.py
+- cli/main.py
+- tests/test_three_level_branch.py
+- tests/test_branch.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) Install section
-- git clone + pip install -e . + bricklayer --help steps shown.
-2) Commands section
-- All 8 working commands documented with description + example.
-3) Build loop section
-- 8-step sequence shown end to end.
-4) v2 debt section
-- Honest limitations listed; no hype language.
-5) No placeholder text
-- Zero instances of TODO, TBD, or template boilerplate.
-6) No phantom features
-- No references to commands or flags that don't yet exist.
+1) Feature branch
+- Created from main; error if not on main; state updated.
+
+2) Phase branch
+- Created from feature/*; error if not on feature/*; state updated.
+
+3) Brick branch
+- Created from phase/*; error if not on phase/*; state updated.
+
+4) Verdict PASS routing
+- brick/* → merge to current_phase; phase/* → merge to
+  current_feature; feature/* → merge to main.
+
+5) close-phase
+- Merges phase/* → current_feature, deletes branch, updates state.
+
+6) close-feature
+- Merges feature/* → main, deletes branch, updates state.
+
+7) Error cases
+- Wrong parent → clear error, exit 1, no state change.
+- Git failures → clear error, exit 1, no traceback.
+
+8) State fields
+- current_feature and current_phase track correctly through
+  full three-level flow.
 
 TEST REQUIREMENTS:
-- No automated tests for this brick.
-- Gate: manual read-through confirming all criteria above.
+- Feature/phase/brick creation happy paths
+- Wrong parent errors for all three levels
+- Verdict PASS routing for all three levels
+- close-phase and close-feature happy paths
+- close-phase/close-feature wrong branch errors
+- State field updates through full flow
+- Git failures → exit 1, no traceback
+- CliRunner integration
 
 OUT OF SCOPE:
-- API reference generation
-- Changelog / release notes
-- Any code changes
+- Modifying state.py schema validation
+- Changes to bricklayer.yaml structure
+- Any Phase 4 commands

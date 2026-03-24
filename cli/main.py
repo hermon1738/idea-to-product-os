@@ -18,6 +18,7 @@ from cli.commands.build import (
     run_verdict,
 )
 from cli.commands.next import run_next
+from cli.commands.pause import run_pause
 from cli.commands.status import run_status
 
 app = typer.Typer(
@@ -111,6 +112,16 @@ def next() -> None:
         raise typer.Exit(code=1)
     exit_code = run_next(yaml_path.parent)
     raise typer.Exit(code=exit_code)
+
+
+@app.command()
+def pause() -> None:
+    """Write HANDOFF.json and .continue-here.md for session handoff."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_pause(yaml_path.parent))
 
 
 @app.command()

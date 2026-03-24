@@ -19,6 +19,7 @@ from cli.commands.build import (
 )
 from cli.commands.next import run_next
 from cli.commands.pause import run_pause
+from cli.commands.resume import run_resume
 from cli.commands.status import run_status
 
 app = typer.Typer(
@@ -112,6 +113,16 @@ def next() -> None:
         raise typer.Exit(code=1)
     exit_code = run_next(yaml_path.parent)
     raise typer.Exit(code=exit_code)
+
+
+@app.command()
+def resume() -> None:
+    """Print session context from HANDOFF.json for session restart."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_resume(yaml_path.parent))
 
 
 @app.command()

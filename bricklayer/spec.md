@@ -1,89 +1,93 @@
-BRICK: Brick 11 - bricklayer commit
+BRICK: Brick 12 - bricklayer close-session
 
 WHAT:
-  `bricklayer commit` is a git commit wrapper that auto-tags commits
-  with the current brick ID and phase from state.json. Enforces the
-  stack-rules.md commit message format. Replaces manual git commit
-  during mid-brick checkpoints.
+  `bricklayer close-session` is the formal session ending command.
+  It loads sprint-brain.md, formats a sprint review prompt from
+  current state, calls Groq to generate the review, writes the
+  output to session-log.md, updates STATE.md with current position,
+  and prints the next session start command. Replaces the manual
+  sprint review paste ritual.
 
 INPUT:
-  state.json (brick number, brick name), -m message from user,
-  staged files in git index at time of call.
+  state.json, bricklayer/spec.md, system-prompts/sprint-brain.md
+  (path from bricklayer.yaml), Groq API key from environment
 
 OUTPUT:
-  bricklayer commit -m "add deep merge fix"
-    → commits staged files with message:
-      "feat(brick-11): add deep merge fix
-
-       Brick: 11 — bricklayer commit
-       Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-    → prints commit hash and message, exit 0
-  bricklayer commit with nothing staged
-    → "Nothing staged. Use git add first.", exit 1
-  bricklayer commit with no -m flag
-    → "Commit message required: bricklayer commit -m 'your message'",
-      exit 1
-  bricklayer commit -m ""
-    → "Commit message cannot be empty", exit 1
+  1. Groq call with sprint-brain.md as system prompt +
+     current brick status as user message
+  2. session-log.md written at repo root with:
+     - timestamp
+     - bricks attempted this session
+     - sprint review output from Groq
+  3. STATE.md written/updated at repo root with:
+     - current project
+     - current brick
+     - last action
+     - next command
+  4. Printed to terminal:
+     "Session closed. Next session:
+      bricklayer resume"
 
 GATE:
-  RUNS — stage a file, run bricklayer commit -m "test", confirm git
-  log shows correctly formatted commit with brick ID. Run with
-  nothing staged — error, exit 1. Run with no -m — error, exit 1.
+  OUTPUTS — run `bricklayer close-session`, confirm:
+  session-log.md exists with Groq output, STATE.md exists with
+  correct current position, terminal prints next session
+  instruction. Run with missing Groq key → clear error, exit 1.
 
 BLOCKER:
-  bricklayer close-session (Brick 12) uses this to commit session
-  summary.
+  This is the last Phase 3 brick. Completes the full session
+  management loop: pause → resume → commit → close-session.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/commit.py
+- cli/commands/close_session.py
 - cli/main.py
-- tests/test_commit.py
+- tests/test_close_session.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
 1) Happy path
-- Files staged, -m provided → commit created with correct format,
-  prints commit hash and message, exit 0.
+- Valid state.json + Groq key → session-log.md written,
+  STATE.md written, correct terminal output, exit 0.
 
-2) Commit message format
-- Subject: "feat(brick-N): <message>"
-- Body: "Brick: N — <brick_name>"
-- Trailer: "Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+2) session-log.md format
+- Timestamp present, brick status present, Groq output present.
 
-3) Nothing staged
-- "Nothing staged. Use git add first.", exit 1, no traceback.
+3) STATE.md format
+- All 4 fields present (current project, current brick, last
+  action, next command), values match state.json.
 
-4) No -m flag
-- Usage error printed, exit 1, no traceback.
+4) Missing GROQ_API_KEY
+- Error "GROQ_API_KEY not set in environment", exit 1,
+  no files written, no raw traceback.
 
-5) Empty -m string
-- "Commit message cannot be empty", exit 1.
+5) Missing state.json
+- Clear error, exit 1, no raw traceback.
 
-6) Missing state.json
-- Clear error, exit 1, no traceback.
+6) Groq call fails (mock non-200 response)
+- Clear error, exit 1, session-log.md not written in partial state.
 
-7) git commit fails
-- Clear error, exit 1, no traceback.
+7) Missing sprint-brain.md path in bricklayer.yaml
+- Clear error naming the missing path, exit 1.
 
 8) CliRunner integration
-- `bricklayer commit -m "msg"` via CliRunner → exit 0,
-  commit message matches format.
+- Invoke `bricklayer close-session` via CliRunner with mocked
+  Groq call, assert exit code, file existence, and STATE.md content.
 
 TEST REQUIREMENTS:
-- Happy path: commit created, message format correct, exit 0
-- Format: feat(brick-N) prefix, brick name in body, Co-Authored-By
-- Nothing staged: "Nothing staged" error, exit 1, no traceback
-- No -m: usage error, exit 1, no traceback
-- Empty -m: "Commit message cannot be empty", exit 1
+- Happy path: valid state + Groq key → both files written, exit 0
+- session-log.md format: timestamp, brick status, Groq output
+- STATE.md format: 4 fields present, values match state.json
+- Missing GROQ_API_KEY: error message, exit 1, no files written
 - Missing state.json: error, exit 1, no traceback
-- git commit fails: error, exit 1, no traceback
-- CliRunner: exit 0, log entry format correct
+- Groq call fails: error, exit 1, no partial files
+- Missing sprint-brain.md: error naming path, exit 1
+- CliRunner: exit 0, files exist, STATE.md content correct
 
 OUT OF SCOPE:
-- Amending commits
-- Interactive rebase
-- Any push operations
+- Pushing to remote
+- Sending notifications or webhooks
+- Any git operations
+- Groq model selection (always llama-3.1-8b-instant)

@@ -82,9 +82,9 @@ def test_missing_path_prints_error_and_exits(
         load_and_validate(yaml_path)
 
     assert exc_info.value.code == 1
-    out = capsys.readouterr().out
-    assert "Missing: system-prompts/nonexistent.md" in out
-    assert "check bricklayer.yaml" in out
+    err = capsys.readouterr().err
+    assert "Missing: system-prompts/nonexistent.md" in err
+    assert "check bricklayer.yaml" in err
 
 
 def test_missing_path_no_traceback(
@@ -100,8 +100,8 @@ def test_missing_path_no_traceback(
     with pytest.raises(SystemExit):
         load_and_validate(yaml_path)
 
-    out = capsys.readouterr().out
-    assert "Traceback" not in out
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
 
 
 def test_multiple_missing_paths_all_reported(
@@ -118,9 +118,9 @@ def test_multiple_missing_paths_all_reported(
         load_and_validate(yaml_path)
 
     assert exc_info.value.code == 1
-    out = capsys.readouterr().out
-    assert "missing/a.md" in out
-    assert "missing/b.md" in out
+    err = capsys.readouterr().err
+    assert "missing/a.md" in err
+    assert "missing/b.md" in err
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +138,8 @@ def test_missing_yaml_file_exits_with_message(
         load_and_validate(yaml_path)
 
     assert exc_info.value.code == 1
-    out = capsys.readouterr().out
-    assert "bricklayer.yaml not found at repo root" in out
+    err = capsys.readouterr().err
+    assert "bricklayer.yaml not found at repo root" in err
 
 
 def test_missing_yaml_no_traceback(
@@ -151,5 +151,5 @@ def test_missing_yaml_no_traceback(
     with pytest.raises(SystemExit):
         load_and_validate(yaml_path)
 
-    out = capsys.readouterr().out
-    assert "Traceback" not in out
+    err = capsys.readouterr().err
+    assert "Traceback" not in err

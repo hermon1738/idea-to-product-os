@@ -1,4 +1,4 @@
-"""Branch command: create and checkout brick/N-name or feature/name branches."""
+"""Branch command: create and checkout brick/phase/feature branches."""
 
 from __future__ import annotations
 
@@ -21,6 +21,24 @@ def _slugify(name: str) -> str:
     return slug.strip("-")
 
 
+def _get_current_branch(root: Path) -> str | None:
+    """Return the current git branch name, or None on failure."""
+    try:
+        proc = _subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(root),
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    if proc.returncode == 0:
+        return proc.stdout.strip()
+    return None
+
+
 def _git_create_checkout(root: Path, branch_name: str) -> tuple[int, str]:
     """Run git checkout -b <branch_name>. Returns (exit_code, output)."""
     proc = _subprocess.run(
@@ -39,16 +57,60 @@ def run_branch(
     number: Optional[str],
     name: Optional[str],
     feature: bool = False,
+    phase: bool = False,
 ) -> int:
-    """Create and checkout a brick/N-name or feature/name branch."""
+    """Create and checkout a brick/phase/feature branch with parent validation."""
+    current = _get_current_branch(root)
+
     if feature:
-        # --feature: first positional arg is the feature name
+        # --feature: must be on main
+        if current != "main":
+            typer.echo(
+                f"error: --feature branches must be created from main "
+                f"(currently on '{current}')",
+                err=True,
+            )
+            return 1
         feature_name = name or number
         if not feature_name:
-            typer.echo("error: name required (usage: bricklayer branch --feature name)", err=True)
+            typer.echo(
+                "error: name required (usage: bricklayer branch --feature name)", err=True
+            )
             return 1
         branch_name = f"feature/{_slugify(feature_name)}"
+
+    elif phase:
+        # --phase N name: must be on a feature/* branch
+        if current is None or not current.startswith("feature/"):
+            typer.echo(
+                f"error: --phase branches must be created from a feature/* branch "
+                f"(currently on '{current}')",
+                err=True,
+            )
+            return 1
+        if number is None:
+            typer.echo(
+                "error: phase number required (usage: bricklayer branch --phase N name)",
+                err=True,
+            )
+            return 1
+        if name is None:
+            typer.echo(
+                "error: phase name required (usage: bricklayer branch --phase N name)",
+                err=True,
+            )
+            return 1
+        branch_name = f"phase/{number}-{_slugify(name)}"
+
     else:
+        # Brick branch: must be on a phase/* branch
+        if current is None or not current.startswith("phase/"):
+            typer.echo(
+                f"error: brick branches must be created from a phase/* branch "
+                f"(currently on '{current}')",
+                err=True,
+            )
+            return 1
         if number is None:
             typer.echo(
                 "error: brick number required (usage: bricklayer branch N name)", err=True
@@ -68,7 +130,19 @@ def run_branch(
 
     state_path = root / STATE_RELPATH
     if state_path.exists():
-        state_write(state_path, {"current_branch": branch_name})
+        if feature:
+            state_write(state_path, {
+                "current_branch": branch_name,
+                "current_feature": branch_name,
+                "current_phase": None,
+            })
+        elif phase:
+            state_write(state_path, {
+                "current_branch": branch_name,
+                "current_phase": branch_name,
+            })
+        else:
+            state_write(state_path, {"current_branch": branch_name})
 
     typer.echo(f"branch: {branch_name}")
     return 0

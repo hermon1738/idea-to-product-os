@@ -18,6 +18,8 @@ from cli.commands.build import (
     run_test,
     run_verdict,
 )
+from cli.commands.close_feature import run_close_feature
+from cli.commands.close_phase import run_close_phase
 from cli.commands.close_session import run_close_session
 from cli.commands.next import run_next
 from cli.commands.pause import run_pause
@@ -66,16 +68,17 @@ def commit(
 
 @app.command()
 def branch(
-    number: Optional[str] = typer.Argument(None, help="Brick number (e.g. 9)."),
+    number: Optional[str] = typer.Argument(None, help="Brick/phase number."),
     name: Optional[str] = typer.Argument(None, help="Branch name slug."),
     feature: bool = typer.Option(False, "--feature", help="Create a feature/ branch."),
+    phase: bool = typer.Option(False, "--phase", help="Create a phase/ branch."),
 ) -> None:
-    """Create and checkout a brick/N-name or feature/name branch."""
+    """Create and checkout a brick/phase/feature branch."""
     yaml_path = find_yaml()
     if yaml_path is None:
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
-    raise typer.Exit(code=run_branch(yaml_path.parent, number, name, feature))
+    raise typer.Exit(code=run_branch(yaml_path.parent, number, name, feature, phase))
 
 
 @app.command()
@@ -152,6 +155,26 @@ def pause() -> None:
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
     raise typer.Exit(code=run_pause(yaml_path.parent))
+
+
+@app.command()
+def close_phase() -> None:
+    """Merge current phase/* branch to its parent feature/* branch."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_close_phase(yaml_path.parent))
+
+
+@app.command()
+def close_feature() -> None:
+    """Merge current feature/* branch to main."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_close_feature(yaml_path.parent))
 
 
 @app.command()

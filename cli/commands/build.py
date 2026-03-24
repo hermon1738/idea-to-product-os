@@ -199,13 +199,13 @@ def _get_current_branch(root: Path) -> str | None:
     return None
 
 
-def _merge_brick_branch(root: Path, branch_name: str) -> tuple[int, str]:
-    """Checkout main, merge branch with --no-ff, delete branch.
+def _merge_branch_to(root: Path, branch_name: str, target: str) -> tuple[int, str]:
+    """Checkout target, merge branch_name with --no-ff, delete branch_name.
 
     Returns (exit_code, message). On failure, message is human-readable.
     """
     checkout = _subprocess.run(
-        ["git", "checkout", "main"],
+        ["git", "checkout", target],
         cwd=str(root),
         stdout=_subprocess.PIPE,
         stderr=_subprocess.STDOUT,
@@ -214,7 +214,7 @@ def _merge_brick_branch(root: Path, branch_name: str) -> tuple[int, str]:
     )
     if checkout.returncode != 0:
         return checkout.returncode, (
-            f"error: git checkout main failed: {checkout.stdout.strip()}"
+            f"error: git checkout {target} failed: {checkout.stdout.strip()}"
         )
 
     merge = _subprocess.run(
@@ -237,7 +237,7 @@ def _merge_brick_branch(root: Path, branch_name: str) -> tuple[int, str]:
         stderr=_subprocess.PIPE,
         check=False,
     )
-    return 0, f"Merged {branch_name} → main. Branch deleted."
+    return 0, f"Merged {branch_name} → {target}. Branch deleted."
 
 
 def _parse_brick_name(spec_text: str) -> str:
@@ -337,18 +337,40 @@ def run_verdict(root: Path, config: dict[str, Any], verdict_value: str) -> int:
                 typer.echo("error: git commit failed — state not advanced", err=True)
                 return 1
 
-        # Auto-merge brick branches; feature branches stay open
+        # Auto-merge: detect branch level and merge to correct parent
         current_branch = _get_current_branch(root)
         if current_branch is not None and current_branch.startswith("brick/"):
-            merge_code, merge_msg = _merge_brick_branch(root, current_branch)
+            parent = raw_state.get("current_phase")
+            if not parent:
+                typer.echo(
+                    "error: current_phase not set in state.json — cannot determine merge target",
+                    err=True,
+                )
+                return 1
+            merge_code, merge_msg = _merge_branch_to(root, current_branch, parent)
+            typer.echo(merge_msg)
+            if merge_code != 0:
+                typer.echo("error: git merge failed — state not advanced", err=True)
+                return 1
+        elif current_branch is not None and current_branch.startswith("phase/"):
+            parent = raw_state.get("current_feature")
+            if not parent:
+                typer.echo(
+                    "error: current_feature not set in state.json — cannot determine merge target",
+                    err=True,
+                )
+                return 1
+            merge_code, merge_msg = _merge_branch_to(root, current_branch, parent)
             typer.echo(merge_msg)
             if merge_code != 0:
                 typer.echo("error: git merge failed — state not advanced", err=True)
                 return 1
         elif current_branch is not None and current_branch.startswith("feature/"):
-            typer.echo(
-                "Feature branch open. Merge to main when all bricks in this feature pass."
-            )
+            merge_code, merge_msg = _merge_branch_to(root, current_branch, "main")
+            typer.echo(merge_msg)
+            if merge_code != 0:
+                typer.echo("error: git merge failed — state not advanced", err=True)
+                return 1
 
         tool_path = get_tool_path(config, "state", root)
         if tool_path is None:

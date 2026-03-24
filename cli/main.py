@@ -18,6 +18,7 @@ from cli.commands.build import (
     run_test,
     run_verdict,
 )
+from cli.commands.close_session import run_close_session
 from cli.commands.next import run_next
 from cli.commands.pause import run_pause
 from cli.commands.resume import run_resume
@@ -151,6 +152,16 @@ def pause() -> None:
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
     raise typer.Exit(code=run_pause(yaml_path.parent))
+
+
+@app.command()
+def close_session() -> None:
+    """Sprint review via Groq; write session-log.md and STATE.md."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_close_session(yaml_path.parent, yaml_path))
 
 
 @app.command()

@@ -1,92 +1,87 @@
-BRICK: Brick 9 - bricklayer pause
+BRICK: Brick 10 - bricklayer resume
 
 WHAT:
-  `bricklayer pause` writes two files that capture full session state
-  so the next session can resume without any manual context
-  reconstruction.
+  `bricklayer resume` reads HANDOFF.json and prints a fully formatted
+  context block that can be pasted directly into a new Claude Code
+  session — no manual reconstruction required. After printing, checks
+  if current git branch matches HANDOFF.json current_branch and warns
+  if mismatched. Does not auto-switch branches.
 
 INPUT:
-  state.json (current brick, loop_count, next_action, last_action,
-  current_branch), bricklayer/spec.md (current brick contract),
-  git current branch (via git rev-parse).
+  HANDOFF.json at repo root (written by bricklayer pause).
 
 OUTPUT:
-  HANDOFF.json (repo root):
-    {
-      "project": "bricklayer-cli",
-      "brick": <current brick number>,
-      "brick_name": "<current brick name>",
-      "last_action": "<state.json next_action>",
-      "loop_count": <state.json loop_count>,
-      "current_branch": "<current git branch>",
-      "timestamp": "<ISO 8601>",
-      "next_command": "<output of bricklayer next>"
-    }
-  .continue-here.md (repo root):
-    Last session ended: <timestamp>
-    Project: <project>
-    Branch: <current_branch>
-    Current brick: Brick N — <name>
-    Last action: <last_action>
+  Printed context block:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    RESUMING SESSION
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Project:      <project>
+    Branch:       <current_branch>
+    Brick:        <brick> — <brick_name>
+    Last action:  <last_action>
+    Loop count:   <loop_count>
+    Paused at:    <timestamp>
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     Next command: <next_command>
-    Blockers: none
-  Both files written atomically. If either write fails → clear
-  error, exit 1, neither file left in partial state.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  If current branch != HANDOFF.json current_branch:
+    Warning: you are on <current> but session was paused on
+    <expected>. Switch with: git checkout <expected>
+  Exit 0 in all success cases (including branch mismatch warning).
 
 GATE:
-  OUTPUTS — run `bricklayer pause`, confirm HANDOFF.json and
-  .continue-here.md exist and contain correct values matching
-  current state.json. Corrupt state.json → clear error, exit 1,
-  no raw traceback.
+  RUNS — run `bricklayer pause` then `bricklayer resume` in sequence.
+  Confirm resume output matches all HANDOFF.json fields exactly.
+  Switch branches, run resume again — confirm branch mismatch warning.
+  Corrupt/missing HANDOFF.json → clear error, exit 1, no traceback.
 
 BLOCKER:
-  bricklayer resume (Brick 10) reads HANDOFF.json — nothing to
-  resume without this.
+  Without this, session restart is still manual.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/pause.py
+- cli/commands/resume.py
 - cli/main.py
-- tests/test_pause.py
+- tests/test_resume.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
 1) Happy path
-- Valid state.json → HANDOFF.json and .continue-here.md written
-  with correct values. Exit 0.
+- Valid HANDOFF.json → formatted context block printed with all
+  fields, exit 0.
 
-2) HANDOFF.json fields
-- All 8 fields present: project, brick, brick_name, last_action,
-  loop_count, current_branch, timestamp, next_command.
-- Timestamp is valid ISO 8601.
+2) Branch match
+- Current branch == HANDOFF.json current_branch → no warning.
 
-3) .continue-here.md content
-- All 6 lines present: Last session ended, Project, Branch,
-  Current brick, Last action, Next command.
-- Values match HANDOFF.json.
+3) Branch mismatch
+- Current branch differs → warning with both branch names, exit 0.
 
-4) Missing state.json
-- Clear error, exit 1, no files written, no raw traceback.
+4) Missing HANDOFF.json
+- Error: "No session to resume. Run bricklayer pause first."
+  Exit 1. No files written. No raw traceback.
 
-5) Partial write safety
-- If second file write fails, neither file is left in a partial
-  or corrupted state (first file removed or both absent).
+5) Malformed HANDOFF.json
+- Clear error, exit 1, no raw traceback.
 
-6) CliRunner integration
-- `bricklayer pause` via CliRunner → exit 0, both files exist
-  with correct content.
+6) Missing required field
+- Clear error naming the missing field, exit 1.
+
+7) CliRunner integration
+- `bricklayer resume` via CliRunner → exit 0, output contains all
+  required fields in correct format.
 
 TEST REQUIREMENTS:
-- Happy path: both files written, exit 0
-- HANDOFF.json: all 8 fields, ISO 8601 timestamp
-- .continue-here.md: all 6 lines, values match HANDOFF.json
-- Missing state.json: error, exit 1, no files, no traceback
-- Partial write safety: second write failure → neither file present
-- CliRunner: exit 0, both files exist with correct content
+- Happy path: all fields in output, exit 0
+- Branch match: no warning
+- Branch mismatch: warning with correct names, exit 0
+- Missing HANDOFF.json: correct error message, exit 1, no traceback
+- Malformed HANDOFF.json: error, exit 1, no traceback
+- Missing required field: error names the field, exit 1
+- CliRunner: exit 0, all fields in output
 
 OUT OF SCOPE:
-- bricklayer resume (Brick 10)
-- Any network or cloud sync of HANDOFF.json
-- Pushing to remote
+- Auto-switching branches
+- Writing any files
+- Any network operations

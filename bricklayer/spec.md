@@ -1,61 +1,58 @@
-BRICK: Brick 19 - bricklayer new-project
+BRICK: Brick 20 - bricklayer context
 
 WHAT:
-  `bricklayer new-project <name>` scaffolds a new project directory
-  at context/projects/<name>/ with the three files every project
-  needs to track state and decisions.
+  `bricklayer context` prints a compact context block for a project
+  that can be pasted directly into any AI session to orient it
+  instantly. Replaces manual context assembly at session start.
 
 INPUT:
-  Project name as positional argument
+  Optional --project flag. Defaults to current project from
+  bricklayer/state.json if not specified.
 
 OUTPUT:
-  bricklayer new-project reddit-monitor
-    -> creates context/projects/reddit-monitor/
-    -> creates context/projects/reddit-monitor/STATE.md
-    -> creates context/projects/reddit-monitor/decision-log.md
-    -> creates context/projects/reddit-monitor/state.json
-    -> prints "Project created: context/projects/reddit-monitor/"
+  Formatted context block with dividers, state fields, last 3
+  decision-log rows, and next command.
 
-  Project name already exists -> error, exit 1, no files created
-  Invalid name (spaces, special chars) -> error, exit 1
-  context/projects/ created if it doesn't exist
+  Project not found -> clear error, exit 1
+  context/projects/ empty or missing -> "No projects found", exit 1
+  Malformed state.json -> clear error, exit 1
 
 GATE:
   OUTPUTS
 
 BLOCKER:
-  bricklayer context (Brick 20) reads from this structure.
+  bricklayer resume will call this in Phase 5 to restore full
+  session context.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/new_project.py
+- cli/commands/context.py
 - cli/main.py
-- tests/test_new_project.py
+- tests/test_context.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) Valid name -> all three files created with correct initial content, exit 0
-2) Duplicate name -> error, exit 1, no files created
-3) Invalid name (spaces) -> error, exit 1
-4) Invalid name (/, \, .) -> error, exit 1
-5) Kebab-case and underscores are valid names
-6) context/projects/ created if it doesn't exist
-7) state.json is valid JSON with all required fields
+1) Valid project -> all 6 sections print correctly, exit 0
+2) No --project flag -> reads project from bricklayer/state.json
+3) Empty decision-log.md -> "No decisions logged yet"
+4) More than 3 decisions -> only last 3 printed
+5) Project not found -> clear error, exit 1, no traceback
+6) context/projects/ missing -> "No projects found", exit 1
+7) Malformed state.json in project -> clear error, exit 1
 
 TEST REQUIREMENTS:
-- Happy path: valid name -> all three files, correct content, exit 0
-- Duplicate name -> error, exit 1, no files created
-- Invalid name with spaces -> error, exit 1
-- Invalid name with special chars -> error, exit 1
-- Kebab-case and underscores are valid
-- context/projects/ created if absent
-- state.json valid JSON with all required fields
-- CliRunner integration
+- Happy path: all fields correct, exit 0
+- No --project: reads from bricklayer/state.json
+- Empty decision-log.md: "No decisions logged yet"
+- More than 3 decisions: only last 3
+- Project not found: error, exit 1
+- context/projects/ missing: error, exit 1
+- Malformed state.json: error, exit 1
+- CliRunner integration: all 6 sections in output
 
 OUT OF SCOPE:
-- Modifying any existing project
-- Writing to bricklayer/state.json
-- Any command other than new-project
+- Writing to any file
+- Any command other than context
 - Any file outside the FILES list

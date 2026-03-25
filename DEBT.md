@@ -28,6 +28,9 @@
 | D-018 | context.py | decision-log.md row parsing breaks if any data row contains "Date" in second column or uses non-standard table spacing | Brick 20 | LOW |
 | D-019 | context.py | projects_dir not-empty check missing — empty context/projects/ dir falls through to "project not found" instead of "No projects found" | Brick 20 | LOW |
 | D-020 | context.py | _resolve_project_name falls back to current_brick when project field absent — raw brick name without " - " separator used as project path, could produce unexpected resolution | Brick 20 | LOW |
+| D-021 | registry.py | _write_atomic uses static .tmp suffix — concurrent add()/update_status() calls clobber the same temp file, corrupting the registry; fix: tempfile.NamedTemporaryFile | Brick 21 | HIGH |
+| D-022 | registry.py | add() checks key presence only — empty string or None values pass REQUIRED_FIELDS validation; fix: check truthiness or type of each field value | Brick 21 | LOW |
+| D-023 | registry.py | O(N) read-modify-write entire YAML file on every add()/update_status() — will cause contention at scale with many agents or frequent status updates | Brick 21 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

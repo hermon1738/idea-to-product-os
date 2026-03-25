@@ -7,7 +7,10 @@ WHY THIS EXISTS:
     head — inconsistently, incompletely, and without a written record. This
     command offloads the review to a Groq LLM using the sprint-brain.md system
     prompt, then persists the output so the next session starts with a written
-    summary of the previous session's outcomes.
+    summary of the previous session's outcomes. After the local write, it also
+    syncs a decision-log row and pipeline-status.md to DOCS_PATH (the VPS
+    docs directory), replacing the manual !scribe Discord ritual for CLI
+    sessions.
 
 DESIGN DECISIONS:
 - Import Groq at module level rather than inside _call_groq. Alternative was
@@ -31,6 +34,22 @@ DESIGN DECISIONS:
   importable at the top level. Catching Exception covers all of them plus any
   network-level errors, at the cost of also catching unexpected bugs. This is
   an intentional tradeoff documented here rather than using a ``# noqa`` comment.
+- Docs sync (DOCS_PATH) is always a soft operation: DOCS_PATH not set or
+  directory missing both print a message and continue without returning 1.
+  Reason: the VPS docs directory may not be locally mounted; close-session
+  should not fail because of a remote path that is legitimately absent on the
+  local machine.
+- GROQ_HEAVY_MODEL (llama-3.3-70b-versatile) is used for structured JSON
+  extraction from the sprint review output. The 8b model produces conversational
+  prose; extracting component/decision/status/next_action from that prose needs
+  better instruction-following. The main sprint review stays on 8b for speed.
+- _extract_structured_data falls back to state-derived defaults if the heavy
+  model call fails or returns non-JSON. This prevents a crash when the
+  extraction call is unavailable. Making the fallback smarter is tracked as
+  v2 debt in DEBT.md (D-011).
+- _sanitize_pipe replaces ``|`` with ``-`` in every field written into a
+  markdown table cell. Without this, LLM-generated pipe characters silently
+  corrupt the decision-log.md table structure.
 """
 
 from __future__ import annotations
@@ -50,10 +69,32 @@ STATE_RELPATH = "bricklayer/state.json"
 SESSION_LOG_RELPATH = "session-log.md"
 STATE_MD_RELPATH = "STATE.md"
 
-# Groq model and timeout — named constants so they are easy to find and
-# change without hunting through function bodies.
+# Groq model constants — named so they are easy to find and change without
+# hunting through function bodies.
 GROQ_MODEL: str = "llama-3.1-8b-instant"
+GROQ_HEAVY_MODEL: str = "llama-3.3-70b-versatile"
 GROQ_TIMEOUT: float = 30.0
+
+# System prompt sent to GROQ_HEAVY_MODEL to extract structured data from the
+# sprint review prose. Kept as a module constant so tests can inspect it and
+# so it is easy to tune without hunting through function bodies.
+_EXTRACTION_SYSTEM_PROMPT = (
+    "You are a data extractor. Given a sprint review, return ONLY a JSON object "
+    "with exactly these four keys: "
+    '"component" (what was worked on, concise noun phrase), '
+    '"decision" (the main outcome or decision made, one sentence max 80 chars), '
+    '"status" (one of: DONE, IN PROGRESS, BLOCKED, QUEUED), '
+    '"next_action" (the immediate next step, one short phrase). '
+    "No markdown fences, no explanation — raw JSON only."
+)
+
+# Decision-log header — must match what Session Scribe writes so both tools
+# produce consistent entries in the same file.
+_DECISION_LOG_HEADER = (
+    "# Decision Log — Idea-to-Product OS\n"
+    "| Date | Component | Decision Made | Status | Next Action |\n"
+    "|------|-----------|--------------|--------|-------------|\n"
+)
 
 # Maps next_action values to CLI commands for STATE.md — mirrors the routing
 # table in pause.py. Kept here rather than imported to avoid coupling
@@ -303,8 +344,190 @@ def _write_state_md(root: Path, state: dict[str, Any]) -> bool:
         return False
 
 
+def _sanitize_pipe(text: str) -> str:
+    """Replace pipe characters with dashes so they cannot corrupt markdown tables.
+
+    Why it exists: LLM output may contain ``|`` characters in any field. A
+    single unescaped pipe inside a table cell breaks every column to its right,
+    silently corrupting decision-log.md for all future reads.
+
+    Args:
+        text: Any string that will be written into a markdown table cell.
+
+    Returns:
+        The input string with every ``|`` replaced by ``-``.
+    """
+    return text.replace("|", "-")
+
+
+def _extract_structured_data(
+    api_key: str, groq_output: str, state: dict[str, Any]
+) -> dict[str, str]:
+    """Call GROQ_HEAVY_MODEL to extract structured JSON from sprint review prose.
+
+    Why it exists: The 8b sprint review model produces free-form prose. Naively
+    splitting on the first line captures conversational filler. GROQ_HEAVY_MODEL
+    (70b) reliably extracts component/decision/status/next_action as JSON.
+
+    Falls back to state-derived defaults if the call fails or the response is
+    not valid JSON. Making the fallback smarter is tracked as D-011 in DEBT.md.
+
+    Args:
+        api_key: Groq API key.
+        groq_output: Sprint review prose from the first (8b) Groq call.
+        state: Parsed state.json dict — used for fallback values only.
+
+    Returns:
+        Dict with keys: component, decision, status, next_action. All strings.
+        Never raises.
+    """
+    try:
+        client = Groq(api_key=api_key, timeout=GROQ_TIMEOUT)
+        completion = client.chat.completions.create(
+            model=GROQ_HEAVY_MODEL,
+            messages=[
+                {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
+                {"role": "user", "content": groq_output},
+            ],
+        )
+        raw = completion.choices[0].message.content.strip()
+        # Strip optional ```json ... ``` wrapper that some models emit.
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            raw = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
+        return json.loads(raw)
+    except Exception:  # noqa: BLE001 — fallback path, see DESIGN DECISIONS
+        current_brick = state.get("current_brick") or "unknown"
+        component = (
+            current_brick.split(" - ", 1)[1].strip()
+            if " - " in current_brick
+            else current_brick
+        )
+        return {
+            "component": component,
+            "decision": "sprint review completed",
+            "status": state.get("status") or "unknown",
+            "next_action": state.get("next_action") or "unknown",
+        }
+
+
+def _build_decision_log_row(extracted: dict[str, str]) -> str:
+    """Build one sanitized pipe-delimited decision-log row from extracted data.
+
+    Why it exists: The decision-log row format must match what Session Scribe
+    writes exactly so both tools produce consistent entries. Isolating the
+    builder makes it testable independently.
+
+    Args:
+        extracted: Dict from _extract_structured_data with keys component,
+                   decision, status, next_action.
+
+    Returns:
+        A markdown table row string:
+        ``| YYYY-MM-DD | component | decision | STATUS | next_action |``
+        All LLM-supplied fields are pipe-sanitized.
+    """
+    date = datetime.date.today().isoformat()
+    component = _sanitize_pipe((extracted.get("component") or "unknown")[:80])
+    decision = _sanitize_pipe((extracted.get("decision") or "sprint review completed")[:80])
+    status = _sanitize_pipe(extracted.get("status") or "unknown")
+    next_action = _sanitize_pipe((extracted.get("next_action") or "unknown")[:80])
+    return f"| {date} | {component} | {decision} | {status} | {next_action} |"
+
+
+def _append_decision_log(docs_path: Path, row: str) -> None:
+    """Append one row to decision-log.md, creating the file with header if absent.
+
+    Why it exists: Isolating append logic keeps _sync_docs readable and makes
+    the file-creation branch easy to test independently.
+
+    Args:
+        docs_path: Directory containing (or to contain) decision-log.md.
+        row: Pipe-delimited row string to append.
+    """
+    log_file = docs_path / "decision-log.md"
+    if not log_file.exists():
+        log_file.write_text(_DECISION_LOG_HEADER, encoding="utf-8")
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(row + "\n")
+
+
+def _build_pipeline_status(state: dict[str, Any], groq_output: str) -> str:
+    """Build pipeline-status.md content from current state and sprint review.
+
+    Why it exists: The status file needs to be human-readable and reflect the
+    current session outcome. Isolating the builder makes it testable.
+
+    Args:
+        state: Parsed state.json dict.
+        groq_output: Sprint review text returned by the Groq API.
+
+    Returns:
+        Markdown string suitable for writing to pipeline-status.md.
+    """
+    date = datetime.date.today().isoformat()
+    # Sanitize table cell values — LLM-produced bricks names shouldn't contain
+    # pipes, but state values are untrusted strings so guard here too.
+    current_brick = _sanitize_pipe(state.get("current_brick") or "unknown")
+    status = _sanitize_pipe(state.get("status") or "unknown")
+    next_action = _sanitize_pipe(state.get("next_action") or "unknown")
+    completed = state.get("completed_bricks") or []
+    completed_list = "\n".join(f"- {b}" for b in completed) if completed else "- none"
+
+    return (
+        f"# Pipeline Status\n"
+        f"Last updated: {date}\n\n"
+        f"## Current State\n\n"
+        f"| Field | Value |\n"
+        f"|-------|-------|\n"
+        f"| Current brick | {current_brick} |\n"
+        f"| Status | {status} |\n"
+        f"| Next action | {next_action} |\n\n"
+        f"## Completed Bricks\n\n"
+        f"{completed_list}\n\n"
+        f"## Sprint Review\n\n"
+        f"{groq_output}\n"
+    )
+
+
+def _sync_docs(api_key: str, state: dict[str, Any], groq_output: str) -> None:
+    """Sync decision-log.md and pipeline-status.md to DOCS_PATH if set.
+
+    Why it exists: Replaces the manual !scribe Discord ritual for CLI sessions.
+    After a successful Groq sprint review, this writes the structured summary
+    directly to the VPS docs directory. Always a soft operation — missing or
+    unset DOCS_PATH is not a failure (VPS may not be mounted locally).
+
+    Args:
+        api_key: Groq API key — forwarded to _extract_structured_data.
+        state: Parsed state.json dict.
+        groq_output: Sprint review text returned by the first (8b) Groq call.
+    """
+    docs_path_str = os.environ.get("DOCS_PATH")
+    if not docs_path_str:
+        typer.echo("DOCS_PATH not set, skipping docs sync")
+        return
+
+    docs_path = Path(docs_path_str)
+    if not docs_path.exists():
+        typer.echo(
+            f"warning: DOCS_PATH {docs_path} does not exist, skipping docs sync"
+        )
+        return
+
+    # Second Groq call — structured extraction using the heavy model.
+    extracted = _extract_structured_data(api_key, groq_output, state)
+    row = _build_decision_log_row(extracted)
+    _append_decision_log(docs_path, row)
+
+    status_content = _build_pipeline_status(state, groq_output)
+    (docs_path / "pipeline-status.md").write_text(status_content, encoding="utf-8")
+
+    typer.echo(f"Docs synced to {docs_path}")
+
+
 def run_close_session(root: Path, yaml_path: Path) -> int:
-    """Sprint review via Groq; write session-log.md and STATE.md.
+    """Sprint review via Groq; write session-log.md, STATE.md, and sync VPS docs.
 
     Steps (all must succeed; failure at any step returns 1 with no partial
     files written for that step):
@@ -314,6 +537,7 @@ def run_close_session(root: Path, yaml_path: Path) -> int:
     4. Call Groq API.
     5. Write session-log.md.
     6. Write STATE.md; roll back session-log.md on failure.
+    7. Sync docs to DOCS_PATH (soft — never returns 1).
 
     Why it exists: See module docstring.
 
@@ -357,6 +581,9 @@ def run_close_session(root: Path, yaml_path: Path) -> int:
     if not _write_state_md(root, state):
         (root / SESSION_LOG_RELPATH).unlink(missing_ok=True)
         return 1
+
+    # 7. Sync docs to DOCS_PATH — soft operation, never causes return 1.
+    _sync_docs(api_key, state, groq_output)
 
     typer.echo("Session closed. Next session:")
     typer.echo("  bricklayer resume")

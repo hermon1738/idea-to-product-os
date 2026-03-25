@@ -44,6 +44,7 @@ from cli.commands.build import (
 from cli.commands.close_feature import run_close_feature
 from cli.commands.close_phase import run_close_phase
 from cli.commands.close_session import run_close_session
+from cli.commands.new_project import run_new_project
 from cli.commands.next import run_next
 from cli.commands.pause import run_pause
 from cli.commands.resume import run_resume
@@ -217,6 +218,18 @@ def close_session() -> None:
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
     raise typer.Exit(code=run_close_session(yaml_path.parent, yaml_path))
+
+
+@app.command()
+def new_project(
+    name: str = typer.Argument(..., help="Project name slug (letters, digits, hyphens, underscores)."),
+) -> None:
+    """Scaffold a new project at context/projects/<name>/ with initial state files."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_new_project(yaml_path.parent, name))
 
 
 @app.command()

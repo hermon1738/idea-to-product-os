@@ -1,58 +1,56 @@
-BRICK: Brick 20 - bricklayer context
+BRICK: Brick 21 - agent registry
 
 WHAT:
-  `bricklayer context` prints a compact context block for a project
-  that can be pasted directly into any AI session to orient it
-  instantly. Replaces manual context assembly at session start.
+  A YAML-based agent registry at context/agents/registry.yaml that
+  tracks every agent with its ID, project, runtime, status, trigger,
+  and location. A registry module in cli/ reads and writes it.
+  Pre-populated with the 3 live agents.
 
 INPUT:
-  Optional --project flag. Defaults to current project from
-  bricklayer/state.json if not specified.
+  context/agents/ directory
 
 OUTPUT:
-  Formatted context block with dividers, state fields, last 3
-  decision-log rows, and next command.
-
-  Project not found -> clear error, exit 1
-  context/projects/ empty or missing -> "No projects found", exit 1
-  Malformed state.json -> clear error, exit 1
+  context/agents/registry.yaml — master index with 3 live agents
+  cli/registry.py — load(), get(), add(), update_status()
 
 GATE:
   OUTPUTS
 
 BLOCKER:
-  bricklayer resume will call this in Phase 5 to restore full
-  session context.
+  bricklayer agent list/new/deploy read from this registry.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/context.py
-- cli/main.py
-- tests/test_context.py
+- context/agents/registry.yaml
+- cli/registry.py
+- tests/test_registry.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) Valid project -> all 6 sections print correctly, exit 0
-2) No --project flag -> reads project from bricklayer/state.json
-3) Empty decision-log.md -> "No decisions logged yet"
-4) More than 3 decisions -> only last 3 printed
-5) Project not found -> clear error, exit 1, no traceback
-6) context/projects/ missing -> "No projects found", exit 1
-7) Malformed state.json in project -> clear error, exit 1
+1) registry.yaml exists with 3 live agents, all required fields
+2) load() returns list of 3 dicts
+3) get("idea-os-scribe-01") returns correct agent dict
+4) add() valid agent -> appended, written atomically
+5) add() missing required field -> ValueError, file not modified
+6) add() duplicate ID -> ValueError, file not modified
+7) update_status() valid ID -> persisted correctly
+8) update_status() unknown ID -> ValueError
+9) registry.yaml missing -> load() returns empty list, no crash
+10) malformed registry.yaml -> clear error, no raw traceback
 
 TEST REQUIREMENTS:
-- Happy path: all fields correct, exit 0
-- No --project: reads from bricklayer/state.json
-- Empty decision-log.md: "No decisions logged yet"
-- More than 3 decisions: only last 3
-- Project not found: error, exit 1
-- context/projects/ missing: error, exit 1
-- Malformed state.json: error, exit 1
-- CliRunner integration: all 6 sections in output
+- load(): 3 agents, all required fields
+- get(): known ID -> correct dict; unknown ID -> None
+- add(): valid -> appended atomically
+- add(): missing field -> ValueError, file unchanged
+- add(): duplicate ID -> ValueError, file unchanged
+- update_status(): valid -> persisted
+- update_status(): unknown ID -> ValueError
+- missing registry.yaml -> load() returns []
+- malformed yaml -> ValueError with clear message
 
 OUT OF SCOPE:
-- Writing to any file
-- Any command other than context
+- Any CLI command registration
 - Any file outside the FILES list

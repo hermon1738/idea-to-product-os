@@ -25,6 +25,9 @@
 | D-015 | new_project.py | No max name length validation — names over 255 chars will fail at OS level with no user-friendly error | Brick 19 | LOW |
 | D-016 | new_project.py | Path separators in success output use os.sep — on Windows produces mixed slashes (context\projects\name/) | Brick 19 | LOW |
 | D-017 | new_project.py | state.json schema lock-in — adding fields later requires migration command for all existing project state.json files | Brick 19 | LOW |
+| D-018 | context.py | decision-log.md row parsing breaks if any data row contains "Date" in second column or uses non-standard table spacing | Brick 20 | LOW |
+| D-019 | context.py | projects_dir not-empty check missing — empty context/projects/ dir falls through to "project not found" instead of "No projects found" | Brick 20 | LOW |
+| D-020 | context.py | _resolve_project_name falls back to current_brick when project field absent — raw brick name without " - " separator used as project path, could produce unexpected resolution | Brick 20 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

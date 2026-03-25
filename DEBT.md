@@ -19,6 +19,12 @@
 | D-009 | make_skeptic_packet.py | git add errors swallowed silently — missing file in spec FILES list gives no warning | Brick 8.5 | LOW |
 | D-010 | AGT-SYS-001 | Session Scribe is raw Python — no tool-calling, no memory, no scheduling. NanoBot upgrade planned. | Brick 16 | MEDIUM |
 | D-011 | close_session.py | _extract_structured_data fallback is naive — if heavy model returns invalid JSON, defaults to generic values. Smarter retry or schema-enforced prompt needed. | Brick 18 | LOW |
+| D-012 | close_session.py | response_format={"type":"json_object"} not used — JSON fence-stripping is brittle if model outputs prose before the code block | Brick 18 | LOW |
+| D-013 | close_session.py | .exists() used instead of .is_dir() for DOCS_PATH check — silently fails if DOCS_PATH is a file, not a directory | Brick 18 | LOW |
+| D-014 | new_project.py | Windows reserved names (CON, PRN, COM1, etc.) pass the name regex and will crash on mkdir — no platform check | Brick 19 | LOW |
+| D-015 | new_project.py | No max name length validation — names over 255 chars will fail at OS level with no user-friendly error | Brick 19 | LOW |
+| D-016 | new_project.py | Path separators in success output use os.sep — on Windows produces mixed slashes (context\projects\name/) | Brick 19 | LOW |
+| D-017 | new_project.py | state.json schema lock-in — adding fields later requires migration command for all existing project state.json files | Brick 19 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

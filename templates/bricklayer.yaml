@@ -1,0 +1,30 @@
+# bricklayer.yaml — new project template
+#
+# SETUP:
+#   1. Copy this file to your new project root:
+#        cp /path/to/idea-to-product-os/templates/bricklayer.yaml ./bricklayer.yaml
+#
+#   2. Replace every /path/to/idea-to-product-os below with the
+#      absolute path to your actual installation.
+#      Example: /Users/tony/projects/idea-to-product-os
+#
+#   3. Run: bricklayer --help
+#      The CLI validates every path on startup and tells you which
+#      ones are wrong before anything runs.
+#
+# NOTE: Paths are absolute (required for cross-project use).
+
+phases:
+  audit:   /path/to/idea-to-product-os/system-prompts/repo-auditor.md
+  venture: /path/to/idea-to-product-os/system-prompts/venture-os.md
+  agent:   /path/to/idea-to-product-os/system-prompts/agent-os.md
+  plan:    /path/to/idea-to-product-os/system-prompts/plan-brain.md
+  review:  /path/to/idea-to-product-os/system-prompts/sprint-brain.md
+
+tools:
+  verify:  /path/to/idea-to-product-os/bricklayer/tools/verify_files_touched.py
+  test:    /path/to/idea-to-product-os/bricklayer/tools/run_tests_and_capture.py
+  skeptic: /path/to/idea-to-product-os/bricklayer/tools/make_skeptic_packet.py
+  state:   /path/to/idea-to-product-os/bricklayer/tools/update_state.py
+
+agents: {}

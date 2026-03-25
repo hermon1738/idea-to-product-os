@@ -31,6 +31,8 @@
 | D-021 | registry.py | _write_atomic uses static .tmp suffix — concurrent add()/update_status() calls clobber the same temp file, corrupting the registry; fix: tempfile.NamedTemporaryFile | Brick 21 | HIGH |
 | D-022 | registry.py | add() checks key presence only — empty string or None values pass REQUIRED_FIELDS validation; fix: check truthiness or type of each field value | Brick 21 | LOW |
 | D-023 | registry.py | O(N) read-modify-write entire YAML file on every add()/update_status() — will cause contention at scale with many agents or frequent status updates | Brick 21 | LOW |
+| D-024 | agent.py | Hardcoded column widths (_COL_ID=24, _COL_NAME=22) break table alignment for any agent with an ID or name longer than the column — no truncation or dynamic width fallback | Brick 22 | LOW |
+| D-025 | agent.py | run_agent_status prints "Agent not found: <id>" when registry.yaml is missing — does not distinguish between "file absent" and "ID absent in existing registry" | Brick 22 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

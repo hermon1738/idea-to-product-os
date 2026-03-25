@@ -18,6 +18,7 @@
 | D-008 | next.py | _ROUTING table hardcoded — should eventually be driven by bricklayer.yaml | Brick 4 | LOW |
 | D-009 | make_skeptic_packet.py | git add errors swallowed silently — missing file in spec FILES list gives no warning | Brick 8.5 | LOW |
 | D-010 | AGT-SYS-001 | Session Scribe is raw Python — no tool-calling, no memory, no scheduling. NanoBot upgrade planned. | Brick 16 | MEDIUM |
+| D-011 | close_session.py | _extract_structured_data fallback is naive — if heavy model returns invalid JSON, defaults to generic values. Smarter retry or schema-enforced prompt needed. | Brick 18 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

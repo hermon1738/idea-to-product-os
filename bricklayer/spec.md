@@ -1,62 +1,74 @@
-BRICK: Brick 17 - Documentation full update
+BRICK: Brick 18 - close-session docs sync
 
 WHAT:
-  Update every documentation file to reflect the current state of the system.
-  Create AGENT.md, CLAUDE.md, templates/bricklayer.yaml. Rewrite README.md,
-  docs/getting-started.md, docs/architecture.md, bricklayer/Readme.md,
-  context/pipeline-status.md to match current system state.
+  Upgrade `bricklayer close-session` to write directly to
+  decision-log.md and pipeline-status.md on the VPS after the Groq
+  sprint review call. Replaces the manual !scribe Discord ritual for
+  CLI sessions. Discord !scribe stays as fallback only.
 
 INPUT:
-  All existing documentation files; current CLI state (Bricks 1–16 done)
+  state.json, bricklayer/spec.md, system-prompts/sprint-brain.md,
+  DOCS_PATH env var (path to ~/ai-agents/docs/ — defaults to None
+  if not set, in which case skip docs write silently)
 
 OUTPUT:
-  Root README covers full OS. AGENT.md and CLAUDE.md exist as session entry
-  points. templates/bricklayer.yaml exists as new-project starting point.
-  All rewritten docs reflect Phase 3 complete, 408 tests, three-level branching.
+  Existing behavior (unchanged):
+    → calls Groq with sprint-brain.md + current state
+    → writes session-log.md locally
+    → updates STATE.md
+    → prints next session instruction
+
+  New behavior (added):
+    → after Groq call, also extracts structured data from sprint
+      review output
+    → appends one row to decision-log.md at DOCS_PATH
+      Format: | date | component | decision | status | next_action |
+    → rewrites pipeline-status.md at DOCS_PATH with updated state
+    → prints "Docs synced to [DOCS_PATH]" on success
+    → if DOCS_PATH not set → prints "DOCS_PATH not set,
+      skipping docs sync" and continues (not a failure)
+    → if DOCS_PATH set but path doesn't exist → prints warning
+      and continues (not a failure — VPS may not be mounted)
 
 GATE:
-  OUTPUTS — manual gate:
-  - bricklayer --help still works
-  - No broken markdown links
-  - Root README covers full OS, not just CLI
-  - AGENT.md and CLAUDE.md exist and are usable as session entry points
-  - templates/bricklayer.yaml exists
-  - context/pipeline-status.md shows 2026-03-24 current state
-  - bricklayer/Readme.md has no pre-CLI content
+  RUNS — run bricklayer close-session with DOCS_PATH set to a temp
+  directory. Confirm decision-log.md gets a new row and
+  pipeline-status.md is rewritten. Run without DOCS_PATH — confirm
+  it exits 0 with skip message.
 
 BLOCKER:
-  Nothing.
+  Nothing downstream.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- README.md
-- AGENT.md
-- CLAUDE.md
-- templates/bricklayer.yaml
-- docs/getting-started.md
-- docs/architecture.md
-- bricklayer/Readme.md
-- context/pipeline-status.md
+- cli/commands/close_session.py
+- tests/test_close_session.py
 - bricklayer/spec.md
+- DEBT.md
 
 ACCEPTANCE CRITERIA:
-1) README.md covers full OS (not just CLI)
-2) AGENT.md exists and is tool-agnostic
-3) CLAUDE.md exists with Claude Code specific rules
-4) templates/bricklayer.yaml exists with correct placeholder paths
-5) docs/getting-started.md has CLI install + new project setup
-6) docs/architecture.md has three-level branching + live agents
-7) bricklayer/Readme.md has no pre-CLI content
-8) context/pipeline-status.md shows current state dated 2026-03-24
-9) No broken links in any file
+1) DOCS_PATH set + valid dir → decision-log.md gets new row,
+   pipeline-status.md rewritten, exit 0
+2) DOCS_PATH not set → "DOCS_PATH not set, skipping docs sync"
+   printed, exit 0
+3) DOCS_PATH set but missing dir → warning printed, exit 0
+4) decision-log.md missing → created with header + row appended
+5) Groq call fails → docs sync does not run
+6) GROQ_HEAVY_MODEL constant = "llama-3.3-70b-versatile" added
 
 TEST REQUIREMENTS:
-- No automated tests.
-- Gate: 408 tests still passing (docs changes touch no Python).
+- Happy path: DOCS_PATH set, valid state → decision-log.md row +
+  pipeline-status.md rewritten, exit 0
+- DOCS_PATH not set → skip message, exit 0
+- DOCS_PATH set but dir missing → warning, exit 0
+- decision-log.md missing → created with header + row
+- Groq call fails → docs sync does not run
+- CliRunner integration: mock Groq + mock filesystem
 
 OUT OF SCOPE:
-- Any Python code changes
-- New CLI features
-- Test file modifications
+- Changes to any other CLI command
+- Changes to session-log.md or STATE.md behavior
+- Discord integration
+- Any Python file outside the FILES list

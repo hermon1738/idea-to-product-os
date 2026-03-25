@@ -1,0 +1,33 @@
+agents:
+  - id: idea-os-scribe-01
+    name: Session Scribe
+    project: idea-to-product-os
+    role: scribe
+    runtime: raw-python
+    status: live
+    trigger: "!scribe in Discord"
+    location: "~/ai-agents/agents/session-scribe/"
+    discord_channel: session-scribe
+    container_name: session-scribe
+
+  - id: idea-os-formatter-01
+    name: Org Schema Formatter
+    project: idea-to-product-os
+    role: formatter
+    runtime: raw-python
+    status: live
+    trigger: "!schema in Discord"
+    location: "~/ai-agents/agents/org-schema-formatter/"
+    discord_channel: org-schema-formatter
+    container_name: org-schema-formatter
+
+  - id: idea-os-dispatcher-01
+    name: Assignment Dispatcher
+    project: idea-to-product-os
+    role: dispatcher
+    runtime: raw-python
+    status: live
+    trigger: "!dispatch in Discord"
+    location: "~/ai-agents/agents/assignment-dispatcher/"
+    discord_channel: assignment-dispatcher
+    container_name: assignment-dispatcher

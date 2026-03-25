@@ -1,56 +1,58 @@
-BRICK: Brick 21 - agent registry
+BRICK: Brick 22 - agent list + status commands
 
 WHAT:
-  A YAML-based agent registry at context/agents/registry.yaml that
-  tracks every agent with its ID, project, runtime, status, trigger,
-  and location. A registry module in cli/ reads and writes it.
-  Pre-populated with the 3 live agents.
+  Two read-only agent commands: `bricklayer agent list` prints all
+  agents from registry.yaml in a formatted table. `bricklayer agent
+  status <id>` prints the full detail block for one agent.
 
 INPUT:
-  context/agents/ directory
+  context/agents/registry.yaml (built in Brick 21)
 
 OUTPUT:
-  context/agents/registry.yaml — master index with 3 live agents
-  cli/registry.py — load(), get(), add(), update_status()
+  bricklayer agent list → formatted table of all agents (or empty
+  message if none registered)
+  bricklayer agent status <id> → full detail block for one agent
+  (or error + exit 1 if ID not found)
 
 GATE:
-  OUTPUTS
+  RUNS — bricklayer agent list prints table with 3 agents.
+  bricklayer agent status idea-os-scribe-01 prints full detail.
+  Unknown ID exits 1 with clear message. Empty registry prints
+  the new-agent prompt.
 
 BLOCKER:
-  bricklayer agent list/new/deploy read from this registry.
+  bricklayer agent new (Brick 23) adds to this list.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- context/agents/registry.yaml
-- cli/registry.py
-- tests/test_registry.py
+- cli/commands/agent.py
+- cli/main.py
+- tests/test_agent_commands.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) registry.yaml exists with 3 live agents, all required fields
-2) load() returns list of 3 dicts
-3) get("idea-os-scribe-01") returns correct agent dict
-4) add() valid agent -> appended, written atomically
-5) add() missing required field -> ValueError, file not modified
-6) add() duplicate ID -> ValueError, file not modified
-7) update_status() valid ID -> persisted correctly
-8) update_status() unknown ID -> ValueError
-9) registry.yaml missing -> load() returns empty list, no crash
-10) malformed registry.yaml -> clear error, no raw traceback
+1) bricklayer agent list prints table with ID/NAME/RUNTIME/STATUS columns
+2) bricklayer agent list with empty registry prints "No agents registered. Run: bricklayer agent new", exits 0
+3) bricklayer agent list with missing registry.yaml prints empty message, exits 0
+4) bricklayer agent status <known-id> prints full detail block with all fields, exits 0
+5) bricklayer agent status <unknown-id> prints "Agent not found: <id>", exits 1
+6) bricklayer agent status with missing registry.yaml prints clear error, exits 1
+7) No raw tracebacks on any error path
 
 TEST REQUIREMENTS:
-- load(): 3 agents, all required fields
-- get(): known ID -> correct dict; unknown ID -> None
-- add(): valid -> appended atomically
-- add(): missing field -> ValueError, file unchanged
-- add(): duplicate ID -> ValueError, file unchanged
-- update_status(): valid -> persisted
-- update_status(): unknown ID -> ValueError
-- missing registry.yaml -> load() returns []
-- malformed yaml -> ValueError with clear message
+- list: 3 agents in registry → table printed with all 3, exit 0
+- list: empty registry → new-agent prompt printed, exit 0
+- list: missing registry.yaml → empty list message, exit 0
+- status: known ID → full detail block printed, exit 0
+- status: unknown ID → error message, exit 1, no raw traceback
+- status: missing registry.yaml → clear error, exit 1
+- CliRunner integration: both commands via CliRunner, assert exit codes
+  and output contains expected fields
 
 OUT OF SCOPE:
-- Any CLI command registration
+- Any write operations to registry.yaml
+- bricklayer agent new (Brick 23)
+- bricklayer agent deploy (Brick 24)
 - Any file outside the FILES list

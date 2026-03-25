@@ -44,6 +44,7 @@ from cli.commands.build import (
 from cli.commands.close_feature import run_close_feature
 from cli.commands.close_phase import run_close_phase
 from cli.commands.close_session import run_close_session
+from cli.commands.context import run_context
 from cli.commands.new_project import run_new_project
 from cli.commands.next import run_next
 from cli.commands.pause import run_pause
@@ -218,6 +219,18 @@ def close_session() -> None:
         typer.echo("error: bricklayer.yaml not found", err=True)
         raise typer.Exit(code=1)
     raise typer.Exit(code=run_close_session(yaml_path.parent, yaml_path))
+
+
+@app.command()
+def context(
+    project: Optional[str] = typer.Option(None, "--project", help="Project name."),
+) -> None:
+    """Print a compact context block for a project for AI session start."""
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=run_context(yaml_path.parent, project))
 
 
 @app.command()

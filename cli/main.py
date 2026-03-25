@@ -41,6 +41,7 @@ from cli.commands.build import (
     run_test,
     run_verdict,
 )
+from cli.commands.agent import agent_app
 from cli.commands.close_feature import run_close_feature
 from cli.commands.close_phase import run_close_phase
 from cli.commands.close_session import run_close_session
@@ -56,6 +57,9 @@ app = typer.Typer(
     help="Bricklayer — Idea-to-Product OS pipeline runner.",
     no_args_is_help=True,
 )
+
+# Register the agent subcommand group (agent list, agent status, ...).
+app.add_typer(agent_app, name="agent")
 
 
 def _validate() -> None:

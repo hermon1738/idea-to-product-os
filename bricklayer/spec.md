@@ -1,74 +1,61 @@
-BRICK: Brick 18 - close-session docs sync
+BRICK: Brick 19 - bricklayer new-project
 
 WHAT:
-  Upgrade `bricklayer close-session` to write directly to
-  decision-log.md and pipeline-status.md on the VPS after the Groq
-  sprint review call. Replaces the manual !scribe Discord ritual for
-  CLI sessions. Discord !scribe stays as fallback only.
+  `bricklayer new-project <name>` scaffolds a new project directory
+  at context/projects/<name>/ with the three files every project
+  needs to track state and decisions.
 
 INPUT:
-  state.json, bricklayer/spec.md, system-prompts/sprint-brain.md,
-  DOCS_PATH env var (path to ~/ai-agents/docs/ — defaults to None
-  if not set, in which case skip docs write silently)
+  Project name as positional argument
 
 OUTPUT:
-  Existing behavior (unchanged):
-    → calls Groq with sprint-brain.md + current state
-    → writes session-log.md locally
-    → updates STATE.md
-    → prints next session instruction
+  bricklayer new-project reddit-monitor
+    -> creates context/projects/reddit-monitor/
+    -> creates context/projects/reddit-monitor/STATE.md
+    -> creates context/projects/reddit-monitor/decision-log.md
+    -> creates context/projects/reddit-monitor/state.json
+    -> prints "Project created: context/projects/reddit-monitor/"
 
-  New behavior (added):
-    → after Groq call, also extracts structured data from sprint
-      review output
-    → appends one row to decision-log.md at DOCS_PATH
-      Format: | date | component | decision | status | next_action |
-    → rewrites pipeline-status.md at DOCS_PATH with updated state
-    → prints "Docs synced to [DOCS_PATH]" on success
-    → if DOCS_PATH not set → prints "DOCS_PATH not set,
-      skipping docs sync" and continues (not a failure)
-    → if DOCS_PATH set but path doesn't exist → prints warning
-      and continues (not a failure — VPS may not be mounted)
+  Project name already exists -> error, exit 1, no files created
+  Invalid name (spaces, special chars) -> error, exit 1
+  context/projects/ created if it doesn't exist
 
 GATE:
-  RUNS — run bricklayer close-session with DOCS_PATH set to a temp
-  directory. Confirm decision-log.md gets a new row and
-  pipeline-status.md is rewritten. Run without DOCS_PATH — confirm
-  it exits 0 with skip message.
+  OUTPUTS
 
 BLOCKER:
-  Nothing downstream.
+  bricklayer context (Brick 20) reads from this structure.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/close_session.py
-- tests/test_close_session.py
+- cli/commands/new_project.py
+- cli/main.py
+- tests/test_new_project.py
 - bricklayer/spec.md
-- DEBT.md
 
 ACCEPTANCE CRITERIA:
-1) DOCS_PATH set + valid dir → decision-log.md gets new row,
-   pipeline-status.md rewritten, exit 0
-2) DOCS_PATH not set → "DOCS_PATH not set, skipping docs sync"
-   printed, exit 0
-3) DOCS_PATH set but missing dir → warning printed, exit 0
-4) decision-log.md missing → created with header + row appended
-5) Groq call fails → docs sync does not run
-6) GROQ_HEAVY_MODEL constant = "llama-3.3-70b-versatile" added
+1) Valid name -> all three files created with correct initial content, exit 0
+2) Duplicate name -> error, exit 1, no files created
+3) Invalid name (spaces) -> error, exit 1
+4) Invalid name (/, \, .) -> error, exit 1
+5) Kebab-case and underscores are valid names
+6) context/projects/ created if it doesn't exist
+7) state.json is valid JSON with all required fields
 
 TEST REQUIREMENTS:
-- Happy path: DOCS_PATH set, valid state → decision-log.md row +
-  pipeline-status.md rewritten, exit 0
-- DOCS_PATH not set → skip message, exit 0
-- DOCS_PATH set but dir missing → warning, exit 0
-- decision-log.md missing → created with header + row
-- Groq call fails → docs sync does not run
-- CliRunner integration: mock Groq + mock filesystem
+- Happy path: valid name -> all three files, correct content, exit 0
+- Duplicate name -> error, exit 1, no files created
+- Invalid name with spaces -> error, exit 1
+- Invalid name with special chars -> error, exit 1
+- Kebab-case and underscores are valid
+- context/projects/ created if absent
+- state.json valid JSON with all required fields
+- CliRunner integration
 
 OUT OF SCOPE:
-- Changes to any other CLI command
-- Changes to session-log.md or STATE.md behavior
-- Discord integration
-- Any Python file outside the FILES list
+- Modifying any existing project
+- Writing to bricklayer/state.json
+- Any command other than new-project
+- Any file outside the FILES list

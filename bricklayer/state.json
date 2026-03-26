@@ -1,18 +1,21 @@
 {
-  "current_brick": "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml",
-  "status": "COMPLETED",
+  "current_brick": "Brick 26 - null state fields + missing state.json",
+  "status": "IN_PROGRESS",
   "loop_count": 0,
   "last_gate_failed": null,
   "completed_bricks": [
     "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation",
     "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml"
   ],
-  "next_action": "Select and prepare next brick",
+  "next_action": "skeptic_packet_ready",
   "last_test_run": {
     "command": "python3 -m pytest -q ../tests/",
     "status": "PASS",
     "exit_code": 0,
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
-  }
+  },
+  "current_branch": "brick/26-state-hardening",
+  "current_feature": "feature/state-hardening",
+  "current_phase": "phase/1-state-fixes"
 }

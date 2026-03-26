@@ -1,58 +1,64 @@
-BRICK: Brick 22 - agent list + status commands
+BRICK: Brick 23 - bricklayer agent new
 
 WHAT:
-  Two read-only agent commands: `bricklayer agent list` prints all
-  agents from registry.yaml in a formatted table. `bricklayer agent
-  status <id>` prints the full detail block for one agent.
+  `bricklayer agent new` scaffolds a new agent directory by cloning
+  nanobot-template or creating a raw-python scaffold, filling in
+  agent ID and metadata, and registering the agent in registry.yaml.
 
 INPUT:
-  context/agents/registry.yaml (built in Brick 21)
+  Agent ID (--id), runtime flag (--runtime), project name
+  (--project), role (--role)
 
 OUTPUT:
-  bricklayer agent list → formatted table of all agents (or empty
-  message if none registered)
-  bricklayer agent status <id> → full detail block for one agent
-  (or error + exit 1 if ID not found)
+  For --runtime nanobot: copies agents/nanobot-template/ to
+    context/agents/<id>/, replaces all __PLACEHOLDER__ values in
+    agent.yaml, workspace/SOUL.md, workspace/AGENTS.md,
+    workspace/USER.md; registers agent in registry.yaml with
+    status: stopped.
+  For --runtime raw-python: creates context/agents/<id>/ with
+    agent.py, Dockerfile, requirements.txt, agent.yaml; registers
+    agent in registry.yaml with status: stopped.
+  Prints: "Agent scaffolded: context/agents/<id>/"
+          "Next: edit workspace/ files, then bricklayer agent deploy"
 
 GATE:
-  RUNS — bricklayer agent list prints table with 3 agents.
-  bricklayer agent status idea-os-scribe-01 prints full detail.
-  Unknown ID exits 1 with clear message. Empty registry prints
-  the new-agent prompt.
+  OUTPUTS — nanobot scaffold created with all placeholders replaced,
+  agent registered with status stopped. raw-python scaffold created.
+  Duplicate ID exits 1, no files created.
 
 BLOCKER:
-  bricklayer agent new (Brick 23) adds to this list.
+  bricklayer agent deploy (Brick 24)
 
 WAVE:
   SEQUENTIAL
 
 FILES:
 - cli/commands/agent.py
-- cli/main.py
-- tests/test_agent_commands.py
+- tests/test_agent_new.py
 - bricklayer/spec.md
 
 ACCEPTANCE CRITERIA:
-1) bricklayer agent list prints table with ID/NAME/RUNTIME/STATUS columns
-2) bricklayer agent list with empty registry prints "No agents registered. Run: bricklayer agent new", exits 0
-3) bricklayer agent list with missing registry.yaml prints empty message, exits 0
-4) bricklayer agent status <known-id> prints full detail block with all fields, exits 0
-5) bricklayer agent status <unknown-id> prints "Agent not found: <id>", exits 1
-6) bricklayer agent status with missing registry.yaml prints clear error, exits 1
-7) No raw tracebacks on any error path
+1) --runtime nanobot: context/agents/<id>/ created from template, all __PLACEHOLDER__ replaced
+2) --runtime raw-python: context/agents/<id>/ created with agent.py, Dockerfile, requirements.txt, agent.yaml
+3) agent registered in registry.yaml with status: stopped after scaffold
+4) duplicate ID: error, exit 1, no directory created, registry unchanged
+5) invalid ID format (spaces, uppercase): error with format hint, exit 1
+6) unknown runtime: error listing nanobot/raw-python, exit 1
+7) nanobot-template missing: clear error with expected path, exit 1
+8) No raw tracebacks on any error path
 
 TEST REQUIREMENTS:
-- list: 3 agents in registry → table printed with all 3, exit 0
-- list: empty registry → new-agent prompt printed, exit 0
-- list: missing registry.yaml → empty list message, exit 0
-- status: known ID → full detail block printed, exit 0
-- status: unknown ID → error message, exit 1, no raw traceback
-- status: missing registry.yaml → clear error, exit 1
-- CliRunner integration: both commands via CliRunner, assert exit codes
-  and output contains expected fields
+- nanobot: valid args -> directory created, placeholders replaced, registered, exit 0
+- nanobot: agent.yaml contains correct id, project, role, sequence, status=stopped
+- raw-python: valid args -> directory created with agent.py, Dockerfile, requirements.txt, agent.yaml, exit 0
+- raw-python: agent.py contains correct AGENT_ID constant
+- duplicate ID -> error, exit 1, no directory created, registry unchanged
+- invalid ID (spaces) -> error with format hint, exit 1
+- invalid ID (uppercase) -> error with format hint, exit 1
+- unknown runtime -> error listing nanobot/raw-python, exit 1
+- nanobot-template missing -> clear error with expected path, exit 1
+- CliRunner integration: both runtimes, assert exit code, directory existence, registry entry
 
 OUT OF SCOPE:
-- Any write operations to registry.yaml
-- bricklayer agent new (Brick 23)
 - bricklayer agent deploy (Brick 24)
 - Any file outside the FILES list

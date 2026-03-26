@@ -1,12 +1,13 @@
 {
   "current_brick": "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml",
-  "status": "IN_PROGRESS",
-  "loop_count": 1,
+  "status": "COMPLETED",
+  "loop_count": 0,
   "last_gate_failed": null,
   "completed_bricks": [
-    "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation"
+    "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation",
+    "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml"
   ],
-  "next_action": "skeptic_packet_ready",
+  "next_action": "Select and prepare next brick",
   "last_test_run": {
     "command": "python3 -m pytest -q ../tests/",
     "status": "PASS",

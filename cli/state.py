@@ -197,7 +197,7 @@ def load(path: Path | str) -> dict[str, Any]:
             # Parent directory missing — cannot auto-create. Raise before
             # read_text() so the error message names the intended path rather
             # than surfacing a lower-level OSError from the OS.
-            raise FileNotFoundError(f"state.json not found at: {p}")
+            p.parent.mkdir(parents=True, exist_ok=True)
 
         # Parent directory exists but state.json is absent — this is a fresh
         # project that only has bricklayer.yaml. Build and persist safe

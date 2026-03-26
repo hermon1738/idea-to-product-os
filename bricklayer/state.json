@@ -16,7 +16,7 @@
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
   },
-  "current_branch": "feature/state-hardening",
-  "current_feature": "feature/state-hardening",
+  "current_branch": "main",
+  "current_feature": null,
   "current_phase": null
 }

@@ -28,6 +28,7 @@ DESIGN DECISIONS:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,54 @@ import typer
 import yaml
 
 YAML_FILENAME = "bricklayer.yaml"
+
+
+def _load_dotenv(directory: Path) -> None:
+    """Load a .env file from directory into os.environ (non-overwriting).
+
+    Why it exists: API keys and secrets are stored in .env files at the
+    project root. Without auto-loading, every developer must manually source
+    .env before running bricklayer close-session — a step that is easy to
+    forget and produces confusing "API key not set" errors. Auto-loading at
+    startup makes the experience seamless without requiring python-dotenv.
+
+    Rules:
+    - .env absent → silent skip, no error.
+    - Blank lines and lines starting with ``#`` → silently skipped.
+    - Lines without ``=`` → skipped with a warning to stderr; remaining lines
+      still load. This prevents a single typo from silently breaking all vars.
+    - Surrounding single or double quotes stripped from values.
+    - Existing os.environ keys are NOT overwritten — the shell always wins.
+
+    Args:
+        directory: Directory to look for a ``.env`` file in. Typically the
+                   directory that contains bricklayer.yaml.
+    """
+    env_path = directory / ".env"
+    if not env_path.exists():
+        return
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            typer.echo(
+                f"warning: .env line {i} malformed (no '='), skipping: {stripped!r}",
+                err=True,
+            )
+            continue
+        key, _, value = stripped.partition("=")
+        key = key.strip()
+        value = value.strip()
+        # Strip surrounding matching quotes (e.g. KEY="value" or KEY='value').
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def find_yaml(start: Path | None = None) -> Path | None:
@@ -98,6 +147,10 @@ def load_and_validate(yaml_path: Path | None = None) -> dict[str, Any]:
         # YAMLError covers parse failures; OSError covers permission/IO errors.
         typer.echo(f"bricklayer.yaml could not be parsed: {exc}", err=True)
         sys.exit(1)
+
+    # Load .env before path validation so secrets (e.g. GROQ_API_KEY) are
+    # available immediately for any command that runs after startup.
+    _load_dotenv(yaml_path.parent)
 
     base = yaml_path.parent
     missing: list[str] = []

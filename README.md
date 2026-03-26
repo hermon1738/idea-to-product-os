@@ -23,23 +23,47 @@ ships with 408 tests. Three live agents on Hetzner VPS.
 ## How It Works
 
 ```
-IDEA
-  │
-  ▼
-Phase 1 — Repo Auditor       Evaluate a GitHub repo. Should you build on it?
-Phase 2 — Venture OS         Stress-test your idea. Build / Adapt / Ignore.
-Phase 3 — Agent-OS           Design the agent hierarchy. What agents? What jobs?
-Phase 4 — Bricklayer Plan    Break the build into gated bricks. One at a time.
-Phase 5 — Build + Review     AI builds. Different AI reviews. Verdict: PASS required.
-Phase 6 — Sprint Review      Close the brick. Log what shipped.
-Phase 7 — Session Scribe     Log the session. Keep context alive between sessions.
-  │
-  ▼
-DEPLOYED AGENT ORGANIZATION
-  Running on Hetzner VPS. Managed via Docker. Triggered via Discord.
+  [A] GitHub repo    [B] Raw idea    [C] Clear concept    [D] Written spec
+       │                  │                │                     │
+       ▼                  ▼                │                     │
+  Phase 1            Phase 2              │                     │
+  Repo Auditor    ── Venture OS           │                     │
+  evaluate repo      stress-test idea     │                     │
+       │                  │               │                     │
+       └─────────┬────────┘               │                     │
+                 ▼                        │                     │
+            Phase 3 ◀────────────────────┘                     │
+            Agent-OS                                            │
+            design agents + PROJECT BRIEF                       │
+                 │                                              │
+                 └────────────────────────┬─────────────────────┘
+                                          ▼
+                                     Phase 4
+                                  Bricklayer Plan
+                                  break work into bricks
+                                          │
+                              ┌───────────▼───────────┐
+                              │    BUILD LOOP          │
+                              │  Builder AI implements │
+                              │  Skeptic AI reviews    │──── FAIL ──▶ fix & retry
+                              │  Verdict: PASS         │             (max 3 loops)
+                              └───────────┬───────────┘
+                                          │ PASS
+                                          ▼
+                                     Phase 6            Phase 7
+                                  Sprint Review  ──▶  Session Scribe
+                                  close brick         log session
+                                  plan next           keep context live
+                                          │
+                                          ▼
+                              DEPLOYED AGENT ORGANIZATION
+                              Hetzner VPS · Docker · Discord
 ```
 
-Not every idea starts at Phase 1. See [`docs/pipeline.md`](docs/pipeline.md) for entry points.
+Not every idea starts at Phase 1.
+See [`docs/pipeline.md`](docs/pipeline.md) for entry points and phase details,
+or [`docs/workflow.md`](docs/workflow.md) for the full visual flow including the
+build loop, git branching model, and session lifecycle.
 
 ---
 
@@ -133,6 +157,7 @@ idea-to-product-os/
 │
 ├── docs/                       ← human documentation
 │   ├── pipeline.md             ← full pipeline explained, entry points
+│   ├── workflow.md             ← visual ASCII workflow diagram
 │   ├── getting-started.md      ← setup guide for new machines
 │   ├── architecture.md         ← system map, live agents, three repos
 │   └── vision.md               ← where this is going
@@ -214,6 +239,7 @@ Source: [hermon1738/ai-agents](https://github.com/hermon1738/ai-agents).
 | Document | What it answers |
 |----------|----------------|
 | [`docs/pipeline.md`](docs/pipeline.md) | How does the full pipeline work? |
+| [`docs/workflow.md`](docs/workflow.md) | Visual ASCII diagram of the full flow |
 | [`docs/getting-started.md`](docs/getting-started.md) | How do I set this up on a new machine? |
 | [`docs/architecture.md`](docs/architecture.md) | How do all the pieces connect? |
 | [`docs/vision.md`](docs/vision.md) | Where is this going? |

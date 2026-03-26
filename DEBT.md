@@ -50,3 +50,4 @@
 | ID | Description | Resolved In |
 |---|---|---|
 | D-038 | close_phase.py / close_feature.py — state_write crashes with ValueError if current_brick is null; merge succeeds but state update fails, leaving state.json inconsistent | Brick 26 |
+| D-039 | tests/test_close_session.py + tests/test_agent_deploy.py | Two tests fail when invoked via bricklayer subprocess chain due to .env auto-loading (Brick 25) polluting subprocess env. Pass when run directly. Fix: mock os.environ in affected tests to isolate env state. | Brick 26 area | MEDIUM |

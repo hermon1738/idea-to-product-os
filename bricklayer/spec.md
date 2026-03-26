@@ -1,64 +1,67 @@
-BRICK: Brick 23 - bricklayer agent new
+BRICK: Brick 24 - bricklayer agent deploy + live
 
 WHAT:
-  `bricklayer agent new` scaffolds a new agent directory by cloning
-  nanobot-template or creating a raw-python scaffold, filling in
-  agent ID and metadata, and registering the agent in registry.yaml.
+  `bricklayer agent deploy` copies a scaffolded agent directory to the
+  ai-agents deploy repo, commits and pushes, then prints the exact
+  docker commands to run on the VPS. Does NOT SSH. Also adds
+  `bricklayer agent live --id <id>` which marks a deployed agent as
+  live in the registry after VPS confirmation.
 
 INPUT:
-  Agent ID (--id), runtime flag (--runtime), project name
-  (--project), role (--role)
+  Agent ID (--id), DEPLOY_REPO_PATH env var (path to local clone of
+  hermon1738/ai-agents)
 
 OUTPUT:
-  For --runtime nanobot: copies agents/nanobot-template/ to
-    context/agents/<id>/, replaces all __PLACEHOLDER__ values in
-    agent.yaml, workspace/SOUL.md, workspace/AGENTS.md,
-    workspace/USER.md; registers agent in registry.yaml with
-    status: stopped.
-  For --runtime raw-python: creates context/agents/<id>/ with
-    agent.py, Dockerfile, requirements.txt, agent.yaml; registers
-    agent in registry.yaml with status: stopped.
-  Prints: "Agent scaffolded: context/agents/<id>/"
-          "Next: edit workspace/ files, then bricklayer agent deploy"
+  deploy: files copied to DEPLOY_REPO_PATH/agents/<id>/, git commit +
+    push, registry status updated to deployed, VPS commands printed.
+  live: registry status updated from deployed to live, confirmation
+    printed.
 
 GATE:
-  OUTPUTS — nanobot scaffold created with all placeholders replaced,
-  agent registered with status stopped. raw-python scaffold created.
-  Duplicate ID exits 1, no files created.
+  OUTPUTS — with DEPLOY_REPO_PATH set to a temp git repo, deploy
+  copies files, creates git commit, updates registry to deployed,
+  prints VPS commands. bricklayer agent live --id updates to live.
+  Missing DEPLOY_REPO_PATH exits 1.
 
 BLOCKER:
-  bricklayer agent deploy (Brick 24)
+  Nothing. This closes Phase 6 agent layer.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
 - cli/commands/agent.py
-- tests/test_agent_new.py
+- tests/test_agent_deploy.py
 - bricklayer/spec.md
+- README.md
 
 ACCEPTANCE CRITERIA:
-1) --runtime nanobot: context/agents/<id>/ created from template, all __PLACEHOLDER__ replaced
-2) --runtime raw-python: context/agents/<id>/ created with agent.py, Dockerfile, requirements.txt, agent.yaml
-3) agent registered in registry.yaml with status: stopped after scaffold
-4) duplicate ID: error, exit 1, no directory created, registry unchanged
-5) invalid ID format (spaces, uppercase): error with format hint, exit 1
-6) unknown runtime: error listing nanobot/raw-python, exit 1
-7) nanobot-template missing: clear error with expected path, exit 1
-8) No raw tracebacks on any error path
+1) deploy: valid agent + DEPLOY_REPO_PATH set -> files copied, commit created, registry status=deployed, exit 0
+2) deploy: VPS commands printed with docker build, docker run --env-file, --restart unless-stopped
+3) deploy: agent not in registry -> error, exit 1
+4) deploy: agent directory missing -> error with path, exit 1
+5) deploy: DEPLOY_REPO_PATH not set -> error with setup instructions, exit 1
+6) deploy: DEPLOY_REPO_PATH not a git repo -> error, exit 1
+7) deploy: git push fails -> error printed with git output, status NOT updated, exit 1
+8) live: known ID with status=deployed -> status updated to live, exit 0
+9) live: unknown ID -> error, exit 1
+10) live: agent already live -> prints already-live message, exit 0
+11) No raw tracebacks on any error path
 
 TEST REQUIREMENTS:
-- nanobot: valid args -> directory created, placeholders replaced, registered, exit 0
-- nanobot: agent.yaml contains correct id, project, role, sequence, status=stopped
-- raw-python: valid args -> directory created with agent.py, Dockerfile, requirements.txt, agent.yaml, exit 0
-- raw-python: agent.py contains correct AGENT_ID constant
-- duplicate ID -> error, exit 1, no directory created, registry unchanged
-- invalid ID (spaces) -> error with format hint, exit 1
-- invalid ID (uppercase) -> error with format hint, exit 1
-- unknown runtime -> error listing nanobot/raw-python, exit 1
-- nanobot-template missing -> clear error with expected path, exit 1
-- CliRunner integration: both runtimes, assert exit code, directory existence, registry entry
+- deploy: valid args -> files copied, git commit created, registry=deployed, exit 0
+- deploy: VPS commands contain docker build + docker run with --env-file and --restart unless-stopped
+- deploy: agent not in registry -> error, exit 1
+- deploy: agent directory missing -> error with path, exit 1
+- deploy: DEPLOY_REPO_PATH not set -> error with setup hint, exit 1
+- deploy: DEPLOY_REPO_PATH not a git repo -> error, exit 1
+- deploy: git push fails -> error printed, status not updated, exit 1
+- live: known ID status=deployed -> live, exit 0
+- live: unknown ID -> error, exit 1
+- live: already live -> already-live message, exit 0
+- CliRunner integration: deploy + live via CliRunner with mocked git ops
 
 OUT OF SCOPE:
-- bricklayer agent deploy (Brick 24)
+- SSH to VPS
+- Actually running docker commands
 - Any file outside the FILES list

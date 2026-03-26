@@ -24,6 +24,12 @@ DESIGN DECISIONS:
   independently loadable — importing from build.py would drag in the entire
   build command dependency tree, which includes heavier imports like the
   spec parser.
+- Explicitly write ``current_brick: ""`` in the post-merge state_write.
+  Alternative was omitting it and letting deep-merge preserve the existing
+  value. Rejected because the existing value may be null when all bricks in
+  the feature's final phase were closed before close-feature runs. A null
+  current_brick fails schema validation and crashes the state write after the
+  git merge already succeeded, leaving state inconsistent (D-038, Brick 26).
 """
 
 from __future__ import annotations
@@ -164,12 +170,17 @@ def run_close_feature(root: Path) -> int:
     # starts from a clean slate. Leaving stale values would cause close-phase
     # on the next feature to merge into the old feature branch, which has
     # already been deleted.
+    # current_brick is coerced to "" for the same reason as close_phase: the
+    # existing state may have null there, which fails schema validation and
+    # crashes the state write after the merge already succeeded (D-038,
+    # fixed in Brick 26).
     state_path = root / STATE_RELPATH
     if state_path.exists():
         state_write(state_path, {
             "current_branch": "main",
             "current_feature": None,
             "current_phase": None,
+            "current_brick": "",
         })
 
     typer.echo("Feature merged to main. Branch deleted.")

@@ -21,6 +21,14 @@ DESIGN DECISIONS:
   inferring the phase branch from state.json and checking it out automatically.
   Rejected because auto-checkout is a silent action that could leave the user
   on an unexpected branch after the command finishes.
+- Explicitly write ``current_brick: ""`` in the post-merge state_write, even
+  when the command itself does not change current_brick. Alternative was
+  omitting it and relying on the deep-merge to preserve the existing value.
+  Rejected because the existing value may be null (bricklayer build --verdict
+  PASS sets it to null after closing the last brick in a phase), and a null
+  current_brick fails state schema validation — crashing the state write after
+  the git merge already succeeded and leaving state.json inconsistent (D-038,
+  fixed in Brick 26).
 """
 
 from __future__ import annotations
@@ -180,6 +188,16 @@ def run_close_phase(root: Path) -> int:
 
     # Clear current_phase after a successful merge so the next phase created
     # on this feature does not inherit the closed phase's name as its target.
-    state_write(state_path, {"current_branch": target, "current_phase": None})
+    # current_brick is coerced to "" because state.json may have null there
+    # (set by bricklayer build --verdict PASS after all bricks in the phase
+    # were closed). A null current_brick would fail _validate()'s str check
+    # and abort the state write after the merge already succeeded — leaving
+    # the repo in a state where the git merge happened but state.json still
+    # shows the old phase as open (D-038, fixed in Brick 26).
+    state_write(state_path, {
+        "current_branch": target,
+        "current_phase": None,
+        "current_brick": "",
+    })
     typer.echo(f"Phase merged to {target}. Start next phase with: bricklayer branch --phase N name")
     return 0

@@ -27,11 +27,18 @@ DESIGN DECISIONS:
   to parse on the next command, breaking the entire pipeline until the
   file is repaired manually. Path.rename() is atomic on POSIX when both
   paths are on the same filesystem.
+- Auto-create state.json with safe defaults when the file is missing but
+  its parent directory exists. Alternative was raising FileNotFoundError and
+  requiring the user to manually bootstrap state.json before using any
+  command. Rejected because fresh-repo users (who copy only bricklayer.yaml)
+  hit an immediate hard failure on every command. The auto-create prints a
+  visible stderr warning so the creation is never silent (Brick 26, D-038).
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +64,61 @@ _TEST_RUN_SCHEMA: dict[str, type | tuple[type, ...]] = {
     "exit_code": int,
     "artifact": str,
 }
+
+# Default last_test_run dict used when auto-creating state.json on a fresh
+# repo. All required fields from _TEST_RUN_SCHEMA are present with zero-value
+# strings so the merged state passes schema validation immediately.
+_DEFAULT_LAST_TEST_RUN: dict[str, str | int] = {
+    "command": "",
+    "status": "",
+    "exit_code": 0,
+    "artifact": "",
+}
+
+
+def _make_default_state(state_path: Path) -> dict[str, Any]:
+    """Build a valid default state dict for a fresh project.
+
+    Why it exists: When state.json is missing, load() needs a complete,
+    schema-valid dict to write to disk and return. Inlining the defaults
+    inside load() would make the function body hard to test in isolation —
+    factoring into a named helper lets tests assert exact field values without
+    triggering file I/O.
+
+    The project name is derived from the directory two levels above the given
+    path (i.e. ``path.parent.parent.name``) because state.json always lives at
+    ``<repo-root>/bricklayer/state.json``. Climbing two levels yields the repo
+    root directory name, which is the most meaningful project identifier
+    available without reading bricklayer.yaml.
+
+    Args:
+        state_path: Absolute path to the state.json file that will be created.
+            Used only to derive the project name; the file is not read.
+
+    Returns:
+        Dict containing every required schema field with safe zero-value
+        defaults. Passes _validate() without modification.
+    """
+    # Derive project name from repo root directory (two levels above
+    # bricklayer/state.json). Falls back to the immediate parent name if the
+    # path has fewer than two parent levels (e.g. in isolated test scenarios).
+    repo_root = state_path.parent.parent
+    project_name: str = repo_root.name if repo_root.name else state_path.parent.name
+
+    return {
+        "project": project_name,
+        "current_brick": "",
+        "status": "",
+        "last_action": "",
+        "loop_count": 0,
+        "last_gate_failed": None,
+        "completed_bricks": [],
+        "next_action": "",
+        "current_branch": "main",
+        "current_feature": None,
+        "current_phase": None,
+        "last_test_run": dict(_DEFAULT_LAST_TEST_RUN),
+    }
 
 
 def _validate(data: dict[str, Any]) -> None:
@@ -105,29 +167,57 @@ def _validate(data: dict[str, Any]) -> None:
 
 
 def load(path: Path | str) -> dict[str, Any]:
-    """Load and validate state.json, returning the parsed dict.
+    """Load and validate state.json, auto-creating it with defaults if missing.
 
     Why it exists: A raw json.loads() call gives no guidance when the file is
-    missing or malformed. This wrapper surfaces a clear exception with the
-    full path so callers can produce a targeted error message.
+    missing or malformed. This wrapper surfaces a clear exception with the full
+    path, and — when the parent directory exists — auto-creates state.json
+    with safe defaults so that ``bricklayer status`` works immediately on a
+    fresh project that only has bricklayer.yaml (Brick 26 fix).
+
+    Auto-create only triggers when the parent directory exists. If both the
+    file and its parent are absent, FileNotFoundError is raised so callers
+    learn about genuinely bad paths rather than silently creating nested dirs.
 
     Args:
         path: Absolute or relative path to state.json.
 
     Returns:
         Validated state dict with all required fields present and correctly
-        typed.
+        typed. On auto-create the returned dict reflects the written defaults.
 
     Raises:
-        FileNotFoundError: If the file does not exist at ``path``.
+        FileNotFoundError: If the file and its parent directory do not exist.
         ValueError: If any required field is missing or has the wrong type.
         json.JSONDecodeError: If the file content is not valid JSON.
     """
     p = Path(path)
     if not p.exists():
-        # Raise before read_text() so the error message names the intended
-        # path rather than surfacing a lower-level OSError.
-        raise FileNotFoundError(f"state.json not found at: {p}")
+        if not p.parent.exists():
+            # Parent directory missing — cannot auto-create. Raise before
+            # read_text() so the error message names the intended path rather
+            # than surfacing a lower-level OSError from the OS.
+            raise FileNotFoundError(f"state.json not found at: {p}")
+
+        # Parent directory exists but state.json is absent — this is a fresh
+        # project that only has bricklayer.yaml. Build and persist safe
+        # defaults so every subsequent command can run without manual setup.
+        default_state = _make_default_state(p)
+        _validate(default_state)  # guard: defaults must always be schema-valid
+
+        # Atomic write so a crash here never leaves a half-written file.
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(default_state, indent=2), encoding="utf-8")
+        tmp.rename(p)
+
+        # Warn to stderr — auto-create must never be silent. The user should
+        # know a new state.json was created so they can verify the defaults.
+        print(
+            f"state.json not found — created with defaults at {p}",
+            file=sys.stderr,
+        )
+        return default_state
+
     data: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
     _validate(data)
     return data

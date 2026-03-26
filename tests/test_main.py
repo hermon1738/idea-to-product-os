@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -162,3 +165,93 @@ def test_run_command_no_yaml_exits_1() -> None:
         assert "Traceback" not in result.output
     finally:
         config_mod.find_yaml = original_find
+
+
+# ---------------------------------------------------------------------------
+# close-session CliRunner integration — .env + llm config
+# ---------------------------------------------------------------------------
+
+
+def _setup_close_session_project(tmp_path: Path) -> Path:
+    """Create a minimal project for close-session tests. Returns yaml_path."""
+    # .env with a custom api key env var name to avoid colliding with real GROQ_API_KEY
+    (tmp_path / ".env").write_text(
+        "_BL_TEST_CS_KEY=key-from-dotenv\n", encoding="utf-8"
+    )
+    # sprint-brain.md
+    (tmp_path / "sprint-brain.md").write_text(
+        "You are a sprint reviewer.\n", encoding="utf-8"
+    )
+    # bricklayer.yaml with llm: section using custom api_key_env
+    yaml_path = tmp_path / "bricklayer.yaml"
+    yaml_path.write_text(
+        "phases:\n  review: sprint-brain.md\n"
+        "tools: {}\nagents: {}\n"
+        "llm:\n  provider: groq\n  model: test-model\n"
+        "  heavy_model: test-heavy\n  api_key_env: _BL_TEST_CS_KEY\n",
+        encoding="utf-8",
+    )
+    # state.json
+    bricklayer_dir = tmp_path / "bricklayer"
+    bricklayer_dir.mkdir()
+    (bricklayer_dir / "state.json").write_text(
+        json.dumps({
+            "current_brick": "Brick 25 - test",
+            "status": "IN_PROGRESS",
+            "loop_count": 0,
+            "last_gate_failed": None,
+            "completed_bricks": [],
+            "next_action": "unknown",
+            "last_test_run": {},
+        }),
+        encoding="utf-8",
+    )
+    return yaml_path
+
+
+def test_close_session_loads_env_file_and_uses_llm_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CliRunner integration: .env loaded at startup; llm: section drives model choice."""
+    yaml_path = _setup_close_session_project(tmp_path)
+
+    # Remove _BL_TEST_CS_KEY from real env — it must come from .env only.
+    monkeypatch.delenv("_BL_TEST_CS_KEY", raising=False)
+
+    # Patch cli.main.find_yaml (the binding used by the close_session command).
+    with patch("cli.main.find_yaml", return_value=yaml_path):
+        with patch("cli.commands.close_session.Groq") as MockGroq:
+            client = MockGroq.return_value
+            mock_resp = MagicMock()
+            mock_resp.choices[0].message.content = "Sprint review complete."
+            client.chat.completions.create.return_value = mock_resp
+
+            result = runner.invoke(app, ["close-session"])
+
+    assert result.exit_code == 0, result.output
+    # Verify Groq was initialised with the key from .env (not from real env)
+    MockGroq.assert_called_once_with(api_key="key-from-dotenv", timeout=30.0)
+    # Verify the model from llm: section was used
+    first_call = client.chat.completions.create.call_args_list[0]
+    assert first_call.kwargs.get("model") == "test-model"
+
+    # Cleanup env var set by _load_dotenv during this test
+    os.environ.pop("_BL_TEST_CS_KEY", None)
+
+
+def test_close_session_api_key_env_unset_exits_1_with_clear_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """api_key_env pointing to an unset var → clear error message, exit 1, no traceback."""
+    yaml_path = _setup_close_session_project(tmp_path)
+
+    # Remove the key and clear .env so it is definitely unset
+    monkeypatch.delenv("_BL_TEST_CS_KEY", raising=False)
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+
+    with patch("cli.main.find_yaml", return_value=yaml_path):
+        result = runner.invoke(app, ["close-session"])
+
+    assert result.exit_code == 1
+    assert "_BL_TEST_CS_KEY" in result.output
+    assert "Traceback" not in result.output

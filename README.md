@@ -183,6 +183,15 @@ bricklayer close-feature             # merge feature → main
 bricklayer pause                     # save session state
 bricklayer commit -m "msg"           # mid-brick checkpoint commit
 bricklayer close-session             # sprint review + log
+bricklayer new-project <name>        # scaffold a new project
+bricklayer context [--project <n>]   # print project context for AI session
+bricklayer agent list                # list all agents in registry
+bricklayer agent status --id <id>    # full detail for one agent
+bricklayer agent new --id <id> \
+  --runtime nanobot|raw-python \
+  --project <project> --role <role>  # scaffold + register a new agent
+bricklayer agent deploy --id <id>    # push agent to deploy repo, print VPS cmds
+bricklayer agent live --id <id>      # mark agent live after VPS confirmation
 ```
 
 ---

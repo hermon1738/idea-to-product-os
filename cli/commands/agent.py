@@ -1,4 +1,4 @@
-"""cli/commands/agent.py — Agent subcommands: list, status, and new.
+"""cli/commands/agent.py — Agent subcommands: list, status, new, deploy, live.
 
 WHY THIS EXISTS:
     Phase 6 introduces a managed agent layer. Operators need to inspect the
@@ -7,7 +7,9 @@ WHY THIS EXISTS:
     registry.yaml.
     `bricklayer agent list` gives a quick overview; `bricklayer agent status
     <id>` gives the full detail for a specific agent; `bricklayer agent new`
-    scaffolds a new agent directory and registers it.
+    scaffolds a new agent directory and registers it; `bricklayer agent deploy`
+    copies the scaffold to the ai-agents repo and pushes; `bricklayer agent
+    live` marks an agent as live after VPS confirmation.
     Without this module there is no human-readable or scriptable CLI surface
     for the agent registry built in Brick 21.
 
@@ -48,8 +50,10 @@ DESIGN DECISIONS:
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +61,7 @@ import yaml
 import typer
 
 from cli.registry import add as registry_add
-from cli.registry import get, load
+from cli.registry import get, load, update_status
 
 # ---------------------------------------------------------------------------
 # Agent-new constants
@@ -655,6 +659,271 @@ def run_agent_new(
 
 
 # ---------------------------------------------------------------------------
+# agent deploy + live — constants and helpers
+# ---------------------------------------------------------------------------
+
+# Divider printed around the deploy-ready block (38 chars, matches context.py).
+_DEPLOY_DIVIDER: str = "━" * 38
+
+# Git subprocess timeout in seconds — enough for a push over a slow connection.
+_GIT_TIMEOUT: int = 60
+
+
+def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run a git subcommand in ``cwd`` with a fixed timeout.
+
+    Why it exists: All git calls share the same flags (capture_output, text,
+    no shell). Centralising them makes the timeout and flags consistent and
+    makes the git operations mockable in tests via a single patch target
+    (``cli.commands.agent._run_git``).
+
+    Args:
+        args: Git subcommand and arguments, e.g. ``["push"]`` or
+              ``["add", "agents/foo/"]``. The ``git`` prefix is prepended here.
+        cwd:  Directory in which to run the command.
+
+    Returns:
+        CompletedProcess with ``returncode``, ``stdout``, and ``stderr``.
+
+    Raises:
+        RuntimeError: If the git command exceeds ``_GIT_TIMEOUT`` seconds.
+            Raised instead of propagating ``subprocess.TimeoutExpired`` so
+            that callers receive a clean, human-readable message rather than
+            a raw traceback. The message names the timed-out command so Tony
+            knows which step stalled.
+    """
+    cmd = ["git"] + args
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT,
+            check=False,
+            cwd=str(cwd),
+        )
+    except subprocess.TimeoutExpired:
+        # Convert to RuntimeError so run_agent_deploy's generic except block
+        # prints the message cleanly without a traceback (D-001 pattern).
+        raise RuntimeError(
+            f"Git operation timed out after {_GIT_TIMEOUT}s: {cmd[1]} {cmd[2] if len(cmd) > 2 else ''}"
+        )
+
+
+def _print_deploy_ready(agent_id: str, deploy_repo: Path) -> None:
+    """Print the deploy-ready block with VPS docker commands.
+
+    Why it exists: Tony runs the VPS commands manually after reviewing
+    this output. Centralising the block keeps the formatting testable
+    and ensures every deploy prints the same instructions.
+
+    Args:
+        agent_id:    The agent ID that was deployed.
+        deploy_repo: Path to the local ai-agents repo clone.
+    """
+    typer.echo(_DEPLOY_DIVIDER)
+    typer.echo(f"DEPLOY READY: {agent_id}")
+    typer.echo(_DEPLOY_DIVIDER)
+    typer.echo(f"Pushed to: {deploy_repo}")
+    typer.echo("")
+    typer.echo("Run on VPS:")
+    typer.echo("  cd ~/ai-agents")
+    typer.echo("  git pull")
+    typer.echo(f"  docker build -t {agent_id} agents/{agent_id}/")
+    typer.echo(f"  docker run -d \\")
+    typer.echo(f"    --name {agent_id} \\")
+    typer.echo(f"    --restart unless-stopped \\")
+    typer.echo(f"    --env-file ~/ai-agents/.env \\")
+    typer.echo(f"    {agent_id}")
+    typer.echo(f"  docker logs {agent_id}")
+    typer.echo("")
+    typer.echo("After confirming live:")
+    typer.echo(f"  bricklayer agent live --id {agent_id}")
+    typer.echo(_DEPLOY_DIVIDER)
+
+
+# ---------------------------------------------------------------------------
+# agent deploy — run handler
+# ---------------------------------------------------------------------------
+
+
+def run_agent_deploy(root: Path, agent_id: str, deploy_repo: Path) -> int:
+    """Copy a scaffolded agent to the deploy repo, push, and print VPS commands.
+
+    Validates the agent exists in registry and on disk, copies the scaffold
+    directory to ``deploy_repo/agents/<id>/``, commits and pushes via git,
+    then updates the registry status to ``deployed``. The registry is NOT
+    updated if the push fails.
+
+    Args:
+        root:        Repo root directory (parent of context/).
+        agent_id:    ID of the agent to deploy.
+        deploy_repo: Absolute path to the local clone of hermon1738/ai-agents.
+
+    Returns:
+        0 on success (files copied, committed, pushed, registry updated).
+        1 on any error (message printed to stderr before return).
+
+    Raises:
+        Never raises. All error paths return 1.
+    """
+    # --- 1. Validate agent is in registry ---
+    try:
+        agent = get(root, agent_id)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        return 1
+
+    if agent is None:
+        typer.echo(f"error: agent '{agent_id}' not found in registry", err=True)
+        return 1
+
+    # --- 2. Validate source directory exists ---
+    source_dir = root / "context" / "agents" / agent_id
+    if not source_dir.exists():
+        typer.echo(
+            f"error: agent directory not found: context/agents/{agent_id}/\n"
+            f"Run: bricklayer agent new --id {agent_id} --runtime ...",
+            err=True,
+        )
+        return 1
+
+    # --- 3. Validate deploy_repo is a real git repo ---
+    if not deploy_repo.is_dir():
+        typer.echo(
+            f"error: deploy repo not found: {deploy_repo}\n"
+            "Set DEPLOY_REPO_PATH to a local git clone of hermon1738/ai-agents.",
+            err=True,
+        )
+        return 1
+
+    rev_parse = _run_git(["rev-parse", "--git-dir"], deploy_repo)
+    if rev_parse.returncode != 0:
+        typer.echo(
+            f"error: {deploy_repo} is not a git repository\n"
+            "Set DEPLOY_REPO_PATH to a local git clone of hermon1738/ai-agents.",
+            err=True,
+        )
+        return 1
+
+    # --- 4. Copy agent directory to deploy repo (clean slate on every deploy) ---
+    target_dir = deploy_repo / "agents" / agent_id
+    # Delete-then-copy rather than dirs_exist_ok=True: files removed from
+    # context/agents/<id>/ would otherwise persist as ghosts in the deploy repo
+    # across re-deploys (D-027-adjacent concern for deploy).
+    if target_dir.exists():
+        shutil.rmtree(str(target_dir))
+    shutil.copytree(str(source_dir), str(target_dir))
+
+    # --- 5‒7. git add / commit / push — wrapped so TimeoutExpired from
+    #          _run_git surfaces as a clean error rather than a raw traceback.
+    try:
+        git_add = _run_git(["add", f"agents/{agent_id}/"], deploy_repo)
+        if git_add.returncode != 0:
+            typer.echo(f"error: git add failed:\n{git_add.stderr}", err=True)
+            return 1
+
+        # --- 6. git commit ---
+        runtime = agent.get("runtime", "unknown")
+        project = agent.get("project", "unknown")
+        commit_msg = (
+            f"feat: add {agent_id}\n\n"
+            f"- runtime: {runtime}\n"
+            f"- project: {project}"
+        )
+        git_commit = _run_git(["commit", "-m", commit_msg], deploy_repo)
+        if git_commit.returncode != 0:
+            # "nothing to commit" means the agent files are unchanged since the
+            # last deploy. Treat this as success — skip push and fall through to
+            # print VPS commands so the operator still gets the docker block.
+            combined = git_commit.stdout + git_commit.stderr
+            if "nothing to commit" in combined or "nothing added to commit" in combined:
+                typer.echo(
+                    "No changes to push — agent already up to date in deploy repo"
+                )
+            else:
+                typer.echo(f"error: git commit failed:\n{git_commit.stderr}", err=True)
+                return 1
+        else:
+            # --- 7. git push — registry status NOT updated on failure ---
+            git_push = _run_git(["push"], deploy_repo)
+            if git_push.returncode != 0:
+                typer.echo(
+                    f"error: git push failed. Check your remote and credentials.\n"
+                    f"{git_push.stderr}",
+                    err=True,
+                )
+                return 1
+
+    except RuntimeError as exc:
+        # _run_git raises RuntimeError when subprocess.TimeoutExpired is caught.
+        # Printing to stderr keeps the message clean — no raw traceback.
+        typer.echo(f"error: {exc}", err=True)
+        return 1
+
+    # --- 8. Update registry status: stopped → deployed ---
+    try:
+        update_status(root, agent_id, "deployed")
+    except ValueError as exc:
+        # Registry update failed after a successful push — log but don't fail.
+        # The agent is deployed; operator can manually update the registry.
+        typer.echo(f"warning: registry update failed: {exc}", err=True)
+
+    # --- 9. Print VPS commands ---
+    _print_deploy_ready(agent_id, deploy_repo)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# agent live — run handler
+# ---------------------------------------------------------------------------
+
+
+def run_agent_live(root: Path, agent_id: str) -> int:
+    """Mark a deployed agent as live in the registry.
+
+    Intended for manual invocation after Tony confirms the agent is running
+    on the VPS (docker logs look good). Updates registry status from
+    ``deployed`` to ``live``. If the agent is already ``live`` the command
+    is idempotent and exits 0 with a message.
+
+    Args:
+        root:     Repo root directory (parent of context/).
+        agent_id: ID of the agent to mark as live.
+
+    Returns:
+        0 on success or if already live.
+        1 if the agent is not found or the registry is malformed.
+
+    Raises:
+        Never raises. All error paths return 1.
+    """
+    try:
+        agent = get(root, agent_id)
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        return 1
+
+    if agent is None:
+        typer.echo(f"error: agent '{agent_id}' not found in registry", err=True)
+        return 1
+
+    if agent.get("status") == "live":
+        # Idempotent — re-marking as live is not an error.
+        typer.echo(f"Agent {agent_id} is already live")
+        return 0
+
+    try:
+        update_status(root, agent_id, "live")
+    except ValueError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        return 1
+
+    typer.echo(f"Agent {agent_id} marked as live")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Typer command wrappers
 # ---------------------------------------------------------------------------
 
@@ -716,3 +985,46 @@ def agent_new(
     raise typer.Exit(
         code=run_agent_new(yaml_path.parent, agent_id, runtime, project, role, config)
     )
+
+
+@agent_app.command(name="deploy")
+def agent_deploy(
+    agent_id: str = typer.Option(..., "--id", help="Agent ID to deploy."),
+) -> None:
+    """Copy agent to the ai-agents repo, push, and print VPS docker commands."""
+    from cli.config import find_yaml
+
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+
+    # DEPLOY_REPO_PATH must be set by the operator before running deploy.
+    deploy_repo_str = os.environ.get("DEPLOY_REPO_PATH")
+    if not deploy_repo_str:
+        typer.echo(
+            "error: DEPLOY_REPO_PATH is not set.\n"
+            "Set it to your local clone of hermon1738/ai-agents:\n"
+            "  export DEPLOY_REPO_PATH=~/ai-agents",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    raise typer.Exit(
+        code=run_agent_deploy(yaml_path.parent, agent_id, Path(deploy_repo_str))
+    )
+
+
+@agent_app.command(name="live")
+def agent_live(
+    agent_id: str = typer.Option(..., "--id", help="Agent ID to mark as live."),
+) -> None:
+    """Mark a deployed agent as live after VPS confirmation."""
+    from cli.config import find_yaml
+
+    yaml_path = find_yaml()
+    if yaml_path is None:
+        typer.echo("error: bricklayer.yaml not found", err=True)
+        raise typer.Exit(code=1)
+
+    raise typer.Exit(code=run_agent_live(yaml_path.parent, agent_id))

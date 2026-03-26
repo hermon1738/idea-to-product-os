@@ -11,10 +11,14 @@ tools:
   skeptic:  bricklayer/tools/make_skeptic_packet.py
   state:    bricklayer/tools/update_state.py
 
-agents: {}
+agents:
+  nanobot_template: agents/nanobot-template/
 
 llm:
   provider: groq
   model: llama-3.1-8b-instant
   heavy_model: llama-3.3-70b-versatile
   api_key_env: GROQ_API_KEY
+
+agents:
+  nanobot_template: agents/nanobot-template/

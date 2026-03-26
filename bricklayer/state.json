@@ -1,5 +1,5 @@
 {
-  "current_brick": "Brick 26 - null state fields + missing state.json",
+  "current_brick": "",
   "status": "COMPLETED",
   "loop_count": 0,
   "last_gate_failed": null,
@@ -16,7 +16,7 @@
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
   },
-  "current_branch": "brick/26-state-hardening",
+  "current_branch": "feature/state-hardening",
   "current_feature": "feature/state-hardening",
-  "current_phase": "phase/1-state-fixes"
+  "current_phase": null
 }

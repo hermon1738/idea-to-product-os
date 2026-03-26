@@ -1,0 +1,24 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "llama-3.1-8b-instant",
+      "provider": "groq",
+      "maxTokens": 4096,
+      "contextWindowTokens": 32768,
+      "maxToolIterations": 10,
+      "temperature": 0.1
+    }
+  },
+  "providers": {
+    "groq": {
+      "apiKey": "__GROQ_API_KEY__"
+    }
+  },
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "__DISCORD_TOKEN__",
+      "allowFrom": ["__DISCORD_USER_ID__"]
+    }
+  }
+}

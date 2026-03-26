@@ -1,0 +1,12 @@
+# Agent metadata — fill in when cloning this template
+# ID format: [project-slug]-[role]-[sequence]
+# Example: idea-os-scribe-01, reddit-monitor-poller-01
+
+id: __AGENT_ID__
+project: __PROJECT_SLUG__
+role: __ROLE__
+sequence: "__SEQUENCE__"
+runtime: nanobot
+status: stopped
+discord_channel: __AGENT_ID__
+container_name: __AGENT_ID__

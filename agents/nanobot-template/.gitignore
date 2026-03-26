@@ -1,0 +1,2 @@
+# Never commit generated config with live secrets
+config/config.json

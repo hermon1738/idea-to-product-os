@@ -143,10 +143,16 @@ End every session with `bricklayer close-session` then `!scribe` in Discord.
 mkdir my-project && cd my-project
 git init
 cp /path/to/idea-to-product-os/templates/bricklayer.yaml ./bricklayer.yaml
+cp /path/to/idea-to-product-os/templates/env.example ./.env
 # edit bricklayer.yaml — replace /path/to/idea-to-product-os with real path
+# edit .env — add your GROQ_API_KEY
+echo ".env" >> .gitignore
 bricklayer --help
 bricklayer branch --feature my-feature
 ```
+
+bricklayer auto-loads `.env` alongside `bricklayer.yaml` at startup — no
+manual sourcing required. Keys already set in your shell are not overwritten.
 
 ---
 

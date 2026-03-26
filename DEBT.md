@@ -43,6 +43,8 @@
 | D-033 | agent.py | subprocess.run(["git", ...]) raises FileNotFoundError if git is not in PATH — no catch for this; raw traceback reaches user in violation of "no raw traceback" rule | Brick 24 | MEDIUM |
 | D-034 | agent.py | shutil.rmtree(target_dir) runs before shutil.copytree — if copytree fails (e.g. disk full), target_dir is permanently deleted with no rollback | Brick 24 | LOW |
 | D-035 | agent.py | git add stages all files in agents/<id>/ but deploy repo may have other files already staged — unrelated staged changes bundled into the deployment commit | Brick 24 | LOW |
+| D-036 | config.py | _load_dotenv inline parser has no support for multi-line values, variable expansion, or export prefix — edge cases like KEY="val with spaces" work only when the entire value is quoted | Brick 25 | LOW |
+| D-037 | close_session.py | openai and anthropic provider support not yet implemented — provider: openai exits 1 with "not yet supported"; tracked for D-037 | Brick 25 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

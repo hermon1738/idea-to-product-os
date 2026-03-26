@@ -36,6 +36,13 @@
 | D-026 | agent.py | _TEMPLATE_FILES_TO_PATCH hardcodes 4 files — any new workspace/*.md files added to nanobot-template that contain __PLACEHOLDER__ tokens will not be patched | Brick 23 | LOW |
 | D-027 | agent.py | shutil.copytree called without ignore= — .git/, .pyc, .DS_Store and other artifacts in nanobot-template are copied into every scaffolded agent directory | Brick 23 | LOW |
 | D-028 | agent.py | _RAW_PYTHON_REQUIREMENTS hardcoded as string constant — updating pinned versions requires a code change rather than editing a standalone requirements template file | Brick 23 | LOW |
+| D-029 | agent.py | git push failure leaves a dangling local commit in deploy repo — next successful deploy will push it bundled with the new commit | Brick 24 | MEDIUM |
+| D-030 | agent.py | deploy prints --env-file ~/ai-agents/.env without verifying the file exists on VPS — missing .env causes container to start without secrets and fail silently | Brick 24 | LOW |
+| D-031 | agent.py | deploy does not validate DEPLOY_REPO_PATH branch state — detached HEAD or feature branch causes git push to fail or push to wrong upstream | Brick 24 | MEDIUM |
+| D-032 | agent.py | manual SSH "last mile" will bottleneck at scale — future bricklayer agent run-on-vps command should handle docker pull+run remotely | Brick 24 | LOW |
+| D-033 | agent.py | subprocess.run(["git", ...]) raises FileNotFoundError if git is not in PATH — no catch for this; raw traceback reaches user in violation of "no raw traceback" rule | Brick 24 | MEDIUM |
+| D-034 | agent.py | shutil.rmtree(target_dir) runs before shutil.copytree — if copytree fails (e.g. disk full), target_dir is permanently deleted with no rollback | Brick 24 | LOW |
+| D-035 | agent.py | git add stages all files in agents/<id>/ but deploy repo may have other files already staged — unrelated staged changes bundled into the deployment commit | Brick 24 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

@@ -50,3 +50,4 @@
 | ID | Description | Resolved In |
 |---|---|---|
 | — | — | — |
+| D-038 | close_phase.py / close_feature.py | state_write crashes with ValueError if current_brick is null — merge succeeds but state update fails silently | Brick 25 area | MEDIUM |

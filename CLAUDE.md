@@ -72,3 +72,10 @@ bricklayer pause / resume            # session save / restore
 bricklayer commit -m "msg"           # mid-brick checkpoint
 bricklayer close-session             # sprint review + log
 ```
+
+## Switching Tools Mid-Session
+
+If you are resuming a session started in another tool:
+  bricklayer resume
+This prints the full context from HANDOFF.json.
+The build sequence is identical regardless of which tool runs it.

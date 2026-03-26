@@ -1,64 +1,69 @@
-BRICK: Brick 25 - auto-.env loading + LLM config from bricklayer.yaml
+BRICK: Brick 26 - null state fields + missing state.json
 
 WHAT:
-  Two config improvements: (1) bricklayer auto-loads .env alongside
-  bricklayer.yaml at startup — no manual sourcing required.
-  (2) close-session reads LLM provider/model/api_key_env from
-  bricklayer.yaml llm: section instead of hardcoded constants.
+  Two related state.json hardening fixes:
+  1. close-phase and close-feature crash with ValueError if current_brick
+     is null in state.json. The merge succeeds but the state update fails.
+     Fix: treat null as empty string when writing state after a merge.
+  2. Every bricklayer command fails with "state.json not found" on a
+     fresh repo or new project. Fix: when state.json is missing,
+     auto-create it with safe defaults instead of exiting 1.
 
 INPUT:
-  .env at project root (optional), bricklayer.yaml llm: section
+  cli/commands/close_phase.py, cli/commands/close_feature.py,
+  cli/state.py, cli/commands/ (all commands that read state)
 
 OUTPUT:
-  .env loaded into os.environ at startup (non-overwriting).
-  close-session uses llm: section config; falls back to Groq defaults
-  with deprecation warning if section absent; exits 1 on unsupported
-  provider.
+  Fix 1: close-phase and close-feature coerce null current_brick to ""
+  before state_write — no ValueError, merge stays consistent.
+  Fix 2: state.load() auto-creates state.json with defaults when missing,
+  prints warning to stderr, returns valid dict.
 
 GATE:
-  RUNS — .env with GROQ_API_KEY loads automatically. Remove llm:
-  section -> deprecation warning. provider: openai -> exit 1.
+  RUNS — in /tmp/test-fresh-repo:
+  1. git init + copy bricklayer.yaml
+  2. bricklayer status -> works, prints defaults, no error
+  3. bricklayer branch --feature test -> works
+  4. Full branch -> close-phase -> close-feature flow with null
+     current_brick in state -> no crash, merges succeed, state
+     updates correctly
 
 BLOCKER:
-  Nothing downstream.
+  Real sessions on fresh project repos fail without this.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/config.py
-- cli/commands/close_session.py
-- bricklayer.yaml
-- templates/bricklayer.yaml
-- templates/env.example
-- docs/getting-started.md
+- cli/state.py
+- cli/commands/close_phase.py
+- cli/commands/close_feature.py
+- tests/test_state.py
+- tests/test_close_phase_fix.py
 - DEBT.md
 - bricklayer/spec.md
-- tests/test_config.py
-- tests/test_main.py
+- bricklayer/state.json
 
 ACCEPTANCE CRITERIA:
-1) .env alongside bricklayer.yaml is loaded into os.environ at startup
-2) .env absent -> silent skip, no error
-3) existing os.environ keys NOT overwritten by .env values
-4) malformed .env line -> line skipped, warning to stderr, other lines load
-5) llm: section present -> correct values used, no deprecation warning
-6) llm: section absent -> Groq defaults used, deprecation warning to stderr
-7) provider: openai -> "Provider X not yet supported" error, exit 1
-8) api_key_env points to unset var -> clear error, exit 1, no traceback
-9) No raw tracebacks on any error path
+1) state.load() missing file -> auto-creates state.json with safe defaults
+2) auto-created state has project = directory name of repo root
+3) auto-created state passes schema validation
+4) auto-create prints warning to stderr: "state.json not found — created with defaults at <path>"
+5) close-phase with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
+6) close-feature with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
+7) close-phase with valid current_brick -> unchanged behavior
+8) Full fresh-repo flow: status -> branch -> close-phase -> close-feature all work without pre-existing state.json
 
 TEST REQUIREMENTS:
-- .env auto-load: KEY=VALUE loaded into os.environ
-- .env auto-load: absent -> silent skip
-- .env auto-load: existing env var not overwritten
-- .env auto-load: malformed line skipped, warning, other lines load
-- LLM config: llm: present -> no deprecation warning, correct values
-- LLM config: llm: absent -> Groq defaults, deprecation warning stderr
-- LLM config: provider: openai -> unsupported error, exit 1
-- LLM config: api_key_env unset var -> clear error, exit 1
-- CliRunner integration: .env + llm config via CliRunner
+- state.load() missing file -> auto-creates with correct defaults, prints warning to stderr
+- auto-created state has project = directory name of repo root
+- auto-created state passes schema validation
+- close-phase with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
+- close-feature with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
+- close-phase with valid current_brick -> unchanged behavior
+- full fresh-repo flow: status -> branch -> close-phase -> close-feature all succeed
 
 OUT OF SCOPE:
-- openai/anthropic provider implementations (D-037)
 - Any file outside the FILES list
+- Changes to other commands beyond state.load() call chain
+- Schema migration or backfill of existing state.json files

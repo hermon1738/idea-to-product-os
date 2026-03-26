@@ -33,6 +33,9 @@
 | D-023 | registry.py | O(N) read-modify-write entire YAML file on every add()/update_status() — will cause contention at scale with many agents or frequent status updates | Brick 21 | LOW |
 | D-024 | agent.py | Hardcoded column widths (_COL_ID=24, _COL_NAME=22) break table alignment for any agent with an ID or name longer than the column — no truncation or dynamic width fallback | Brick 22 | LOW |
 | D-025 | agent.py | run_agent_status prints "Agent not found: <id>" when registry.yaml is missing — does not distinguish between "file absent" and "ID absent in existing registry" | Brick 22 | LOW |
+| D-026 | agent.py | _TEMPLATE_FILES_TO_PATCH hardcodes 4 files — any new workspace/*.md files added to nanobot-template that contain __PLACEHOLDER__ tokens will not be patched | Brick 23 | LOW |
+| D-027 | agent.py | shutil.copytree called without ignore= — .git/, .pyc, .DS_Store and other artifacts in nanobot-template are copied into every scaffolded agent directory | Brick 23 | LOW |
+| D-028 | agent.py | _RAW_PYTHON_REQUIREMENTS hardcoded as string constant — updating pinned versions requires a code change rather than editing a standalone requirements template file | Brick 23 | LOW |
 
 ## Closed Items
 | ID | Description | Resolved In |

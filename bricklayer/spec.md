@@ -1,67 +1,64 @@
-BRICK: Brick 24 - bricklayer agent deploy + live
+BRICK: Brick 25 - auto-.env loading + LLM config from bricklayer.yaml
 
 WHAT:
-  `bricklayer agent deploy` copies a scaffolded agent directory to the
-  ai-agents deploy repo, commits and pushes, then prints the exact
-  docker commands to run on the VPS. Does NOT SSH. Also adds
-  `bricklayer agent live --id <id>` which marks a deployed agent as
-  live in the registry after VPS confirmation.
+  Two config improvements: (1) bricklayer auto-loads .env alongside
+  bricklayer.yaml at startup — no manual sourcing required.
+  (2) close-session reads LLM provider/model/api_key_env from
+  bricklayer.yaml llm: section instead of hardcoded constants.
 
 INPUT:
-  Agent ID (--id), DEPLOY_REPO_PATH env var (path to local clone of
-  hermon1738/ai-agents)
+  .env at project root (optional), bricklayer.yaml llm: section
 
 OUTPUT:
-  deploy: files copied to DEPLOY_REPO_PATH/agents/<id>/, git commit +
-    push, registry status updated to deployed, VPS commands printed.
-  live: registry status updated from deployed to live, confirmation
-    printed.
+  .env loaded into os.environ at startup (non-overwriting).
+  close-session uses llm: section config; falls back to Groq defaults
+  with deprecation warning if section absent; exits 1 on unsupported
+  provider.
 
 GATE:
-  OUTPUTS — with DEPLOY_REPO_PATH set to a temp git repo, deploy
-  copies files, creates git commit, updates registry to deployed,
-  prints VPS commands. bricklayer agent live --id updates to live.
-  Missing DEPLOY_REPO_PATH exits 1.
+  RUNS — .env with GROQ_API_KEY loads automatically. Remove llm:
+  section -> deprecation warning. provider: openai -> exit 1.
 
 BLOCKER:
-  Nothing. This closes Phase 6 agent layer.
+  Nothing downstream.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/agent.py
-- tests/test_agent_deploy.py
+- cli/config.py
+- cli/commands/close_session.py
+- bricklayer.yaml
+- templates/bricklayer.yaml
+- templates/env.example
+- docs/getting-started.md
+- DEBT.md
 - bricklayer/spec.md
-- README.md
+- tests/test_config.py
+- tests/test_main.py
 
 ACCEPTANCE CRITERIA:
-1) deploy: valid agent + DEPLOY_REPO_PATH set -> files copied, commit created, registry status=deployed, exit 0
-2) deploy: VPS commands printed with docker build, docker run --env-file, --restart unless-stopped
-3) deploy: agent not in registry -> error, exit 1
-4) deploy: agent directory missing -> error with path, exit 1
-5) deploy: DEPLOY_REPO_PATH not set -> error with setup instructions, exit 1
-6) deploy: DEPLOY_REPO_PATH not a git repo -> error, exit 1
-7) deploy: git push fails -> error printed with git output, status NOT updated, exit 1
-8) live: known ID with status=deployed -> status updated to live, exit 0
-9) live: unknown ID -> error, exit 1
-10) live: agent already live -> prints already-live message, exit 0
-11) No raw tracebacks on any error path
+1) .env alongside bricklayer.yaml is loaded into os.environ at startup
+2) .env absent -> silent skip, no error
+3) existing os.environ keys NOT overwritten by .env values
+4) malformed .env line -> line skipped, warning to stderr, other lines load
+5) llm: section present -> correct values used, no deprecation warning
+6) llm: section absent -> Groq defaults used, deprecation warning to stderr
+7) provider: openai -> "Provider X not yet supported" error, exit 1
+8) api_key_env points to unset var -> clear error, exit 1, no traceback
+9) No raw tracebacks on any error path
 
 TEST REQUIREMENTS:
-- deploy: valid args -> files copied, git commit created, registry=deployed, exit 0
-- deploy: VPS commands contain docker build + docker run with --env-file and --restart unless-stopped
-- deploy: agent not in registry -> error, exit 1
-- deploy: agent directory missing -> error with path, exit 1
-- deploy: DEPLOY_REPO_PATH not set -> error with setup hint, exit 1
-- deploy: DEPLOY_REPO_PATH not a git repo -> error, exit 1
-- deploy: git push fails -> error printed, status not updated, exit 1
-- live: known ID status=deployed -> live, exit 0
-- live: unknown ID -> error, exit 1
-- live: already live -> already-live message, exit 0
-- CliRunner integration: deploy + live via CliRunner with mocked git ops
+- .env auto-load: KEY=VALUE loaded into os.environ
+- .env auto-load: absent -> silent skip
+- .env auto-load: existing env var not overwritten
+- .env auto-load: malformed line skipped, warning, other lines load
+- LLM config: llm: present -> no deprecation warning, correct values
+- LLM config: llm: absent -> Groq defaults, deprecation warning stderr
+- LLM config: provider: openai -> unsupported error, exit 1
+- LLM config: api_key_env unset var -> clear error, exit 1
+- CliRunner integration: .env + llm config via CliRunner
 
 OUT OF SCOPE:
-- SSH to VPS
-- Actually running docker commands
+- openai/anthropic provider implementations (D-037)
 - Any file outside the FILES list

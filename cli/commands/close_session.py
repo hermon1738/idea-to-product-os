@@ -57,6 +57,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -64,16 +65,29 @@ import typer
 import yaml
 from groq import Groq
 
+from cli.config import _load_dotenv
+
 # Relative paths from repo root.
 STATE_RELPATH = "bricklayer/state.json"
 SESSION_LOG_RELPATH = "session-log.md"
 STATE_MD_RELPATH = "STATE.md"
 
-# Groq model constants — named so they are easy to find and change without
-# hunting through function bodies.
-GROQ_MODEL: str = "llama-3.1-8b-instant"
-GROQ_HEAVY_MODEL: str = "llama-3.3-70b-versatile"
+# Default LLM configuration — used when no llm: section is present in
+# bricklayer.yaml. Kept as named constants so they are easy to locate and so
+# tests can assert on specific values without hardcoding strings.
+DEFAULT_LLM_PROVIDER: str = "groq"
+DEFAULT_LLM_MODEL: str = "llama-3.1-8b-instant"
+DEFAULT_LLM_HEAVY_MODEL: str = "llama-3.3-70b-versatile"
+DEFAULT_LLM_API_KEY_ENV: str = "GROQ_API_KEY"
+
+# Backwards-compatible aliases — existing tests import these names directly.
+GROQ_MODEL: str = DEFAULT_LLM_MODEL
+GROQ_HEAVY_MODEL: str = DEFAULT_LLM_HEAVY_MODEL
+
 GROQ_TIMEOUT: float = 30.0
+
+# Supported providers — any value not in this set exits 1 with a clear message.
+_SUPPORTED_PROVIDERS: frozenset[str] = frozenset({"groq"})
 
 # System prompt sent to GROQ_HEAVY_MODEL to extract structured data from the
 # sprint review prose. Kept as a module constant so tests can inspect it and
@@ -106,6 +120,64 @@ _NEXT_COMMAND_ROUTING: dict[str, str] = {
     "skeptic_packet_ready": "bricklayer build --verdict PASS|FAIL",
     "brick_complete": "bricklayer next",
 }
+
+
+def _read_llm_config(yaml_path: Path) -> dict[str, str]:
+    """Read LLM configuration from the llm: section of bricklayer.yaml.
+
+    Why it exists: Hardcoding Groq constants in close_session.py meant that
+    switching providers or models required a code change. Reading from
+    bricklayer.yaml llm: section lets each project configure its own provider
+    without touching the CLI source.
+
+    Fallback: if llm: section is absent, returns Groq defaults and emits a
+    deprecation warning to stderr so users know to add the section. This avoids
+    a hard break for projects created before Brick 25.
+
+    Args:
+        yaml_path: Absolute path to bricklayer.yaml.
+
+    Returns:
+        Dict with keys: provider, model, heavy_model, api_key_env.
+
+    Raises:
+        SystemExit(1): If the declared provider is not in _SUPPORTED_PROVIDERS.
+    """
+    try:
+        config = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        # If we cannot parse the yaml at all, fall back to defaults.
+        config = {}
+
+    llm = config.get("llm") or {}
+    if not llm:
+        typer.echo(
+            "warning: llm: section missing from bricklayer.yaml — "
+            "using Groq defaults. Add an llm: section to suppress this warning.",
+            err=True,
+        )
+        return {
+            "provider": DEFAULT_LLM_PROVIDER,
+            "model": DEFAULT_LLM_MODEL,
+            "heavy_model": DEFAULT_LLM_HEAVY_MODEL,
+            "api_key_env": DEFAULT_LLM_API_KEY_ENV,
+        }
+
+    provider = (llm.get("provider") or DEFAULT_LLM_PROVIDER).strip()
+    if provider not in _SUPPORTED_PROVIDERS:
+        typer.echo(
+            f"error: Provider {provider} not yet supported. "
+            f"Supported providers: {', '.join(sorted(_SUPPORTED_PROVIDERS))}",
+            err=True,
+        )
+        sys.exit(1)
+
+    return {
+        "provider": provider,
+        "model": (llm.get("model") or DEFAULT_LLM_MODEL).strip(),
+        "heavy_model": (llm.get("heavy_model") or DEFAULT_LLM_HEAVY_MODEL).strip(),
+        "api_key_env": (llm.get("api_key_env") or DEFAULT_LLM_API_KEY_ENV).strip(),
+    }
 
 
 def _load_state(root: Path) -> dict[str, Any] | None:
@@ -216,7 +288,12 @@ def _build_user_message(state: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _call_groq(api_key: str, system_prompt: str, user_message: str) -> str | None:
+def _call_groq(
+    api_key: str,
+    system_prompt: str,
+    user_message: str,
+    model: str = GROQ_MODEL,
+) -> str | None:
     """Call the Groq API and return the response text, or None on any failure.
 
     Why it exists: Isolating the Groq call here means tests can patch
@@ -240,7 +317,7 @@ def _call_groq(api_key: str, system_prompt: str, user_message: str) -> str | Non
     try:
         client = Groq(api_key=api_key, timeout=GROQ_TIMEOUT)
         completion = client.chat.completions.create(
-            model=GROQ_MODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
@@ -361,7 +438,10 @@ def _sanitize_pipe(text: str) -> str:
 
 
 def _extract_structured_data(
-    api_key: str, groq_output: str, state: dict[str, Any]
+    api_key: str,
+    groq_output: str,
+    state: dict[str, Any],
+    heavy_model: str = GROQ_HEAVY_MODEL,
 ) -> dict[str, str]:
     """Call GROQ_HEAVY_MODEL to extract structured JSON from sprint review prose.
 
@@ -384,7 +464,7 @@ def _extract_structured_data(
     try:
         client = Groq(api_key=api_key, timeout=GROQ_TIMEOUT)
         completion = client.chat.completions.create(
-            model=GROQ_HEAVY_MODEL,
+            model=heavy_model,
             messages=[
                 {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
                 {"role": "user", "content": groq_output},
@@ -490,7 +570,12 @@ def _build_pipeline_status(state: dict[str, Any], groq_output: str) -> str:
     )
 
 
-def _sync_docs(api_key: str, state: dict[str, Any], groq_output: str) -> None:
+def _sync_docs(
+    api_key: str,
+    state: dict[str, Any],
+    groq_output: str,
+    heavy_model: str = GROQ_HEAVY_MODEL,
+) -> None:
     """Sync decision-log.md and pipeline-status.md to DOCS_PATH if set.
 
     Why it exists: Replaces the manual !scribe Discord ritual for CLI sessions.
@@ -516,7 +601,7 @@ def _sync_docs(api_key: str, state: dict[str, Any], groq_output: str) -> None:
         return
 
     # Second Groq call — structured extraction using the heavy model.
-    extracted = _extract_structured_data(api_key, groq_output, state)
+    extracted = _extract_structured_data(api_key, groq_output, state, heavy_model=heavy_model)
     row = _build_decision_log_row(extracted)
     _append_decision_log(docs_path, row)
 
@@ -549,10 +634,19 @@ def run_close_session(root: Path, yaml_path: Path) -> int:
     Returns:
         0 on success. 1 on any failure (specific error echoed to stderr).
     """
+    # 0. Load .env alongside bricklayer.yaml so secrets are available before
+    # any other check (e.g. api_key_env lookup below).
+    _load_dotenv(yaml_path.parent)
+
+    # 0b. Read LLM config from bricklayer.yaml llm: section; exits 1 if
+    # provider is unsupported.
+    llm_config = _read_llm_config(yaml_path)
+
     # 1. Check API key before doing any file I/O or network calls.
-    api_key = os.environ.get("GROQ_API_KEY")
+    api_key_env = llm_config["api_key_env"]
+    api_key = os.environ.get(api_key_env)
     if not api_key:
-        typer.echo("error: GROQ_API_KEY not set in environment", err=True)
+        typer.echo(f"error: {api_key_env} not set in environment", err=True)
         return 1
 
     # 2. Load state.json — provides the user message content for the review.
@@ -568,7 +662,7 @@ def run_close_session(root: Path, yaml_path: Path) -> int:
     # 4. Call Groq API — no files are written before this point so a failure
     # here leaves the repo in a clean state.
     user_message = _build_user_message(state)
-    groq_output = _call_groq(api_key, sprint_brain, user_message)
+    groq_output = _call_groq(api_key, sprint_brain, user_message, model=llm_config["model"])
     if groq_output is None:
         return 1
 
@@ -583,7 +677,7 @@ def run_close_session(root: Path, yaml_path: Path) -> int:
         return 1
 
     # 7. Sync docs to DOCS_PATH — soft operation, never causes return 1.
-    _sync_docs(api_key, state, groq_output)
+    _sync_docs(api_key, state, groq_output, heavy_model=llm_config["heavy_model"])
 
     typer.echo("Session closed. Next session:")
     typer.echo("  bricklayer resume")

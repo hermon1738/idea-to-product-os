@@ -108,14 +108,18 @@ def test_missing_state_md_fallback_message(tmp_path: Path, capsys: pytest.Captur
 
 
 # ---------------------------------------------------------------------------
-# Missing state.json: clear error, exit 1, no traceback
+# Missing state.json: auto-create with defaults (Brick 26)
 # ---------------------------------------------------------------------------
 
 
-def test_missing_state_json_exits_one(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-    """When state.json is absent, run_status() returns 1."""
+def test_missing_state_json_autocreates(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """When state.json is absent, run_status() auto-creates it and exits 0.
+
+    Brick 26: load() uses mkdir(parents=True) so fresh-repo users get defaults
+    on first invocation without pre-creating bricklayer/.
+    """
     exit_code = run_status(tmp_path)  # bricklayer/state.json doesn't exist
-    assert exit_code == 1
+    assert exit_code == 0
 
 
 def test_missing_state_json_clear_error(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
@@ -157,8 +161,8 @@ def test_cli_runner_happy_path(tmp_path: Path) -> None:
         assert label in result.output
 
 
-def test_cli_runner_missing_state_json(tmp_path: Path) -> None:
-    """CliRunner: status exits 1 when state.json is absent."""
+def test_cli_runner_missing_state_json_autocreates(tmp_path: Path) -> None:
+    """CliRunner: status exits 0 when state.json is absent (auto-create)."""
     (tmp_path / "bricklayer.yaml").write_text(
         "phases: {}\ntools: {}\nagents: {}\n", encoding="utf-8"
     )
@@ -170,4 +174,4 @@ def test_cli_runner_missing_state_json(tmp_path: Path) -> None:
     finally:
         os.chdir(old_cwd)
 
-    assert result.exit_code == 1
+    assert result.exit_code == 0

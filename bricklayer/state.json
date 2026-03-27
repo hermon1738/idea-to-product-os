@@ -6,7 +6,9 @@
   "completed_bricks": [
     "Brick 1 - CLI Scaffold + YAML Loader + Startup Validation",
     "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml",
-    "Brick 26 - null state fields + missing state.json"
+    "Brick 26 - null state fields + missing state.json",
+    "Brick 27 - Fix close-session prompt quality",
+    "Brick 28 - Auto-push docs after close-session"
   ],
   "next_action": "Select and prepare next brick",
   "last_test_run": {
@@ -16,7 +18,7 @@
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
   },
-  "current_branch": "main",
-  "current_feature": null,
+  "current_branch": "feature/auto-push-docs",
+  "current_feature": "feature/auto-push-docs",
   "current_phase": null
 }

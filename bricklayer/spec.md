@@ -1,69 +1,78 @@
-BRICK: Brick 26 - null state fields + missing state.json
+BRICK: Brick 28 (revision) - Auto-push docs after close-session
 
 WHAT:
-  Two related state.json hardening fixes:
-  1. close-phase and close-feature crash with ValueError if current_brick
-     is null in state.json. The merge succeeds but the state update fails.
-     Fix: treat null as empty string when writing state after a merge.
-  2. Every bricklayer command fails with "state.json not found" on a
-     fresh repo or new project. Fix: when state.json is missing,
-     auto-create it with safe defaults instead of exiting 1.
+  After bricklayer close-session writes docs to DOCS_PATH,
+  automatically run git add + git commit + git push in
+  the DOCS_PATH directory. GitHub becomes the single
+  source of truth immediately after every session.
+
+  Revision fixes three issues from the original Brick 28 attempt:
+  1. _push_docs does not handle subprocess.TimeoutExpired or
+     FileNotFoundError — both crash the CLI instead of warning.
+  2. cli/state.py was regressed — FileNotFoundError was introduced
+     instead of the Brick 26 auto-create (p.parent.mkdir).
+  3. No tests for timeout and FileNotFoundError error paths.
 
 INPUT:
-  cli/commands/close_phase.py, cli/commands/close_feature.py,
-  cli/state.py, cli/commands/ (all commands that read state)
+  DOCS_PATH env var (path to local ai-agents clone)
 
 OUTPUT:
-  Fix 1: close-phase and close-feature coerce null current_brick to ""
-  before state_write — no ValueError, merge stays consistent.
-  Fix 2: state.load() auto-creates state.json with defaults when missing,
-  prints warning to stderr, returns valid dict.
+  After writing docs:
+  → cd DOCS_PATH
+  → git add docs/
+  → git commit -m "sync: session docs YYYY-MM-DD HH:MM"
+  → git push
+  → prints "Docs pushed to GitHub"
+
+  DOCS_PATH not set → skip silently (existing behavior)
+  DOCS_PATH set but not a git repo → warning, skip push
+  git push fails → warning printed, exit 0
+  git times out → warning printed, exit 0
+  git not in PATH → warning printed, exit 0
+    (docs are written locally — push failure is never fatal)
 
 GATE:
-  RUNS — in /tmp/test-fresh-repo:
-  1. git init + copy bricklayer.yaml
-  2. bricklayer status -> works, prints defaults, no error
-  3. bricklayer branch --feature test -> works
-  4. Full branch -> close-phase -> close-feature flow with null
-     current_brick in state -> no crash, merges succeed, state
-     updates correctly
+  RUNS -- run close-session with --summary and DOCS_PATH
+  set. Confirm docs written AND pushed to GitHub in one
+  command. Check git log in ai-agents clone shows new
+  commit.
 
 BLOCKER:
-  Real sessions on fresh project repos fail without this.
+  Nothing. But sync stays broken without this.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
+- cli/commands/close_session.py
 - cli/state.py
-- cli/commands/close_phase.py
-- cli/commands/close_feature.py
+- tests/test_close_session.py
 - tests/test_state.py
-- tests/test_close_phase_fix.py
-- DEBT.md
+- tests/test_next.py
+- tests/test_status.py
 - bricklayer/spec.md
 - bricklayer/state.json
 
 ACCEPTANCE CRITERIA:
-1) state.load() missing file -> auto-creates state.json with safe defaults
-2) auto-created state has project = directory name of repo root
-3) auto-created state passes schema validation
-4) auto-create prints warning to stderr: "state.json not found — created with defaults at <path>"
-5) close-phase with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
-6) close-feature with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
-7) close-phase with valid current_brick -> unchanged behavior
-8) Full fresh-repo flow: status -> branch -> close-phase -> close-feature all work without pre-existing state.json
+1) DOCS_PATH set, valid git repo → docs written + pushed, exit 0
+2) DOCS_PATH set, not a git repo → warning, exit 0 (not fatal)
+3) git push fails (non-zero exit) → warning printed, exit 0
+4) DOCS_PATH not set → skip entirely, exit 0
+5) Commit message format: "sync: session docs YYYY-MM-DD HH:MM"
+6) subprocess.TimeoutExpired → warning to stderr, exit 0, no crash
+7) FileNotFoundError (git not in PATH) → warning to stderr, exit 0, no crash
+8) cli/state.py contains p.parent.mkdir(parents=True, exist_ok=True)
 
 TEST REQUIREMENTS:
-- state.load() missing file -> auto-creates with correct defaults, prints warning to stderr
-- auto-created state has project = directory name of repo root
-- auto-created state passes schema validation
-- close-phase with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
-- close-feature with null current_brick -> merge succeeds, state updated, no ValueError, exit 0
-- close-phase with valid current_brick -> unchanged behavior
-- full fresh-repo flow: status -> branch -> close-phase -> close-feature all succeed
+- DOCS_PATH set, valid git repo → docs written + pushed, exit 0
+- DOCS_PATH set, not a git repo → warning, exit 0 (not fatal)
+- git push fails → warning printed, exit 0
+- DOCS_PATH not set → skip entirely, exit 0
+- subprocess.TimeoutExpired in push → warning to stderr, exit 0
+- FileNotFoundError in push → warning to stderr, exit 0
 
 OUT OF SCOPE:
 - Any file outside the FILES list
-- Changes to other commands beyond state.load() call chain
-- Schema migration or backfill of existing state.json files
+- Changing the Groq provider/model selection logic
+- Changing the output format of decision-log or pipeline-status
+- Any other git operations beyond add/commit/push in DOCS_PATH

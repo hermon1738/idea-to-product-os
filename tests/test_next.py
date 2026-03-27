@@ -93,16 +93,20 @@ def test_unknown_next_action_passthrough(
 
 
 # ---------------------------------------------------------------------------
-# Missing state.json — clear error, exit 1, no traceback
+# Missing state.json — auto-create with defaults (Brick 26)
 # ---------------------------------------------------------------------------
 
 
-def test_missing_state_json_exits_one(
+def test_missing_state_json_autocreates(
     tmp_path: Path, capsys: pytest.CaptureFixture
 ) -> None:
-    """run_next() returns 1 when state.json is absent."""
+    """run_next() auto-creates state.json and exits 0 when file is absent.
+
+    Brick 26: load() uses mkdir(parents=True) so fresh-repo users get defaults
+    automatically on first command invocation.
+    """
     exit_code = run_next(tmp_path)
-    assert exit_code == 1
+    assert exit_code == 0
 
 
 def test_missing_state_json_clear_error(
@@ -150,7 +154,7 @@ def test_cli_runner_known_state_correct_output(tmp_path: Path) -> None:
     assert "bricklayer build --verify" in result.output
 
 
-def test_cli_runner_missing_state_json_exits_one(tmp_path: Path) -> None:
-    """CliRunner: `bricklayer next` exits 1 when state.json is absent."""
+def test_cli_runner_missing_state_json_autocreates(tmp_path: Path) -> None:
+    """CliRunner: `bricklayer next` exits 0 when state.json is absent (auto-create)."""
     result = _cli_invoke(tmp_path, next_action=None)
-    assert result.exit_code == 1
+    assert result.exit_code == 0

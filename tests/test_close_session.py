@@ -26,8 +26,10 @@ from cli.commands.close_session import (  # noqa: E402
     _build_user_message,
     _call_groq,
     _extract_structured_data,
+    _is_git_repo,
     _load_sprint_brain,
     _load_state,
+    _push_docs,
     _sanitize_pipe,
     _sync_docs,
     _write_session_log,
@@ -1172,3 +1174,259 @@ def test_cli_close_session_docs_synced_message(tmp_path: Path) -> None:
     finally:
         os.chdir(old_cwd)
     assert "Docs synced to" in result.output
+
+
+# ---------------------------------------------------------------------------
+# _is_git_repo
+# ---------------------------------------------------------------------------
+
+
+def test_is_git_repo_returns_true_for_real_repo(tmp_path: Path) -> None:
+    """_is_git_repo returns True for a directory git-initialised as a repo."""
+    import subprocess as _sp
+    _sp.run(["git", "init"], cwd=tmp_path, capture_output=True, check=False)
+    assert _is_git_repo(tmp_path) is True
+
+
+def test_is_git_repo_returns_false_for_plain_dir(tmp_path: Path) -> None:
+    """_is_git_repo returns False for a plain directory with no .git."""
+    # tmp_path is guaranteed to be a fresh non-git directory by pytest
+    assert _is_git_repo(tmp_path) is False
+
+
+# ---------------------------------------------------------------------------
+# _push_docs — unit tests (subprocess and _is_git_repo mocked)
+# ---------------------------------------------------------------------------
+
+_PATCH_IS_GIT_REPO = "cli.commands.close_session._is_git_repo"
+_PATCH_SUBPROCESS = "cli.commands.close_session.subprocess"
+_PATCH_PUSH_DOCS = "cli.commands.close_session._push_docs"
+
+
+def test_push_docs_not_git_repo_prints_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """DOCS_PATH not a git repo → warning to stderr, no subprocess calls."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=False):
+        _push_docs(tmp_path)
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "not a git repo" in err
+
+
+def test_push_docs_not_git_repo_no_subprocess_calls(tmp_path: Path) -> None:
+    """No git subprocess calls when _is_git_repo returns False."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=False):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            _push_docs(tmp_path)
+    mock_sp.run.assert_not_called()
+
+
+def test_push_docs_not_git_repo_returns_none(tmp_path: Path) -> None:
+    """_push_docs returns None (no exception) when not a git repo."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=False):
+        result = _push_docs(tmp_path)
+    assert result is None
+
+
+def test_push_docs_git_push_fails_prints_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """git push returncode != 0 → warning to stderr."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            # add and commit succeed; push fails
+            ok = MagicMock(returncode=0, stdout="", stderr="")
+            fail = MagicMock(returncode=1, stdout="", stderr="auth failed")
+            mock_sp.run.side_effect = [ok, ok, fail]
+            _push_docs(tmp_path)
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "git push failed" in err
+
+
+def test_push_docs_git_push_fails_exits_cleanly(tmp_path: Path) -> None:
+    """Push failure does not raise — returns None."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            fail = MagicMock(returncode=1, stdout="", stderr="error")
+            mock_sp.run.return_value = fail
+            result = _push_docs(tmp_path)
+    assert result is None
+
+
+def test_push_docs_success_prints_pushed(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Successful push prints 'Docs pushed to GitHub'."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            _push_docs(tmp_path)
+    out = capsys.readouterr().out
+    assert "Docs pushed to GitHub" in out
+
+
+def test_push_docs_commit_message_contains_sync_prefix(tmp_path: Path) -> None:
+    """Commit message starts with 'sync: session docs'."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            _push_docs(tmp_path)
+    # Three calls: git add, git commit, git push. Commit is index 1.
+    calls = mock_sp.run.call_args_list
+    assert len(calls) == 3, f"expected 3 subprocess.run calls, got {len(calls)}"
+    commit_args: list = calls[1].args[0]
+    assert "commit" in commit_args
+    commit_msg = commit_args[commit_args.index("-m") + 1]
+    assert commit_msg.startswith("sync: session docs ")
+
+
+def test_push_docs_git_add_targets_docs_subdir(tmp_path: Path) -> None:
+    """git add call targets docs/ only, not the entire repo."""
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            _push_docs(tmp_path)
+    add_args: list = mock_sp.run.call_args_list[0].args[0]
+    assert "add" in add_args
+    assert "docs/" in add_args
+
+
+def test_push_docs_timeout_prints_warning_to_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """subprocess.TimeoutExpired → warning to stderr, no crash."""
+    import subprocess as _sp
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.TimeoutExpired = _sp.TimeoutExpired
+            mock_sp.run.side_effect = _sp.TimeoutExpired(cmd="git push", timeout=60)
+            _push_docs(tmp_path)
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "timed out" in err
+
+
+def test_push_docs_timeout_exits_cleanly(tmp_path: Path) -> None:
+    """subprocess.TimeoutExpired does not propagate — returns None."""
+    import subprocess as _sp
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.TimeoutExpired = _sp.TimeoutExpired
+            mock_sp.run.side_effect = _sp.TimeoutExpired(cmd="git push", timeout=60)
+            result = _push_docs(tmp_path)
+    assert result is None
+
+
+def test_push_docs_file_not_found_prints_warning_to_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """FileNotFoundError (git not in PATH) → warning to stderr, no crash."""
+    import subprocess as _sp
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            # TimeoutExpired must be the real class so the except chain resolves
+            mock_sp.TimeoutExpired = _sp.TimeoutExpired
+            mock_sp.run.side_effect = FileNotFoundError("git: not found")
+            _push_docs(tmp_path)
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "git not found" in err
+
+
+def test_push_docs_file_not_found_exits_cleanly(tmp_path: Path) -> None:
+    """FileNotFoundError does not propagate — returns None."""
+    import subprocess as _sp
+    with patch(_PATCH_IS_GIT_REPO, return_value=True):
+        with patch(_PATCH_SUBPROCESS) as mock_sp:
+            mock_sp.TimeoutExpired = _sp.TimeoutExpired
+            mock_sp.run.side_effect = FileNotFoundError("git: not found")
+            result = _push_docs(tmp_path)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# run_close_session — auto-push integration
+# ---------------------------------------------------------------------------
+
+
+def test_run_close_session_docs_path_not_set_no_push_called(tmp_path: Path) -> None:
+    """DOCS_PATH not set → _push_docs never invoked."""
+    _full_setup(tmp_path)
+    env = {k: v for k, v in os.environ.items() if k not in ("GROQ_API_KEY", "DOCS_PATH")}
+    env["GROQ_API_KEY"] = "fake-key"
+    with patch("cli.commands.close_session.Groq") as MockGroq:
+        client = MockGroq.return_value
+        client.chat.completions.create.return_value = _mock_groq_success()
+        with patch(_PATCH_PUSH_DOCS) as mock_push:
+            with patch.dict(os.environ, env, clear=True):
+                result = run_close_session(tmp_path, tmp_path / "bricklayer.yaml")
+    assert result == 0
+    mock_push.assert_not_called()
+
+
+def test_run_close_session_with_docs_path_calls_push(tmp_path: Path) -> None:
+    """DOCS_PATH set and exists → _push_docs called once with docs_path."""
+    _full_setup(tmp_path)
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    with patch("cli.commands.close_session.Groq") as MockGroq:
+        client = MockGroq.return_value
+        client.chat.completions.create.return_value = _mock_groq_success()
+        with patch(_PATCH_EXTRACT, return_value=_EXTRACTED):
+            with patch(_PATCH_PUSH_DOCS) as mock_push:
+                with patch.dict(
+                    os.environ,
+                    {"GROQ_API_KEY": "fake-key", "DOCS_PATH": str(docs_dir)},
+                ):
+                    result = run_close_session(tmp_path, tmp_path / "bricklayer.yaml")
+    assert result == 0
+    mock_push.assert_called_once_with(docs_dir)
+
+
+def test_run_close_session_push_failure_still_exits_zero(tmp_path: Path) -> None:
+    """Push failure (non-fatal) does not change run_close_session return code."""
+    _full_setup(tmp_path)
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    with patch("cli.commands.close_session.Groq") as MockGroq:
+        client = MockGroq.return_value
+        client.chat.completions.create.return_value = _mock_groq_success()
+        with patch(_PATCH_EXTRACT, return_value=_EXTRACTED):
+            with patch(_PATCH_IS_GIT_REPO, return_value=True):
+                with patch(_PATCH_SUBPROCESS) as mock_sp:
+                    # add/commit succeed; push fails
+                    ok = MagicMock(returncode=0, stdout="", stderr="")
+                    fail = MagicMock(returncode=1, stdout="", stderr="error")
+                    mock_sp.run.side_effect = [ok, ok, fail]
+                    with patch.dict(
+                        os.environ,
+                        {"GROQ_API_KEY": "fake-key", "DOCS_PATH": str(docs_dir)},
+                    ):
+                        result = run_close_session(tmp_path, tmp_path / "bricklayer.yaml")
+    assert result == 0
+
+
+def test_run_close_session_not_git_repo_exits_zero(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """DOCS_PATH set but not a git repo → warning printed, exit 0."""
+    _full_setup(tmp_path)
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    with patch("cli.commands.close_session.Groq") as MockGroq:
+        client = MockGroq.return_value
+        client.chat.completions.create.return_value = _mock_groq_success()
+        with patch(_PATCH_EXTRACT, return_value=_EXTRACTED):
+            # _is_git_repo returns False → warning, skip push
+            with patch(_PATCH_IS_GIT_REPO, return_value=False):
+                with patch.dict(
+                    os.environ,
+                    {"GROQ_API_KEY": "fake-key", "DOCS_PATH": str(docs_dir)},
+                ):
+                    result = run_close_session(tmp_path, tmp_path / "bricklayer.yaml")
+    assert result == 0
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "not a git repo" in err

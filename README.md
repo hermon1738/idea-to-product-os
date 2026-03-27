@@ -91,6 +91,9 @@ tests, or infrastructure. They only need one file: `bricklayer.yaml`.
 mkdir my-project && cd my-project
 git init
 cp /path/to/idea-to-product-os/templates/bricklayer.yaml ./bricklayer.yaml
+cp /path/to/idea-to-product-os/templates/env.example .env
+# Edit bricklayer.yaml — replace all /path/to/idea-to-product-os
+# Edit .env — set GROQ_API_KEY and DOCS_PATH for THIS project
 ```
 
 **Step 2 — Update the paths in `bricklayer.yaml`:**

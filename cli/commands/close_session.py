@@ -8,9 +8,9 @@ WHY THIS EXISTS:
     command offloads the review to a Groq LLM using the sprint-brain.md system
     prompt, then persists the output so the next session starts with a written
     summary of the previous session's outcomes. After the local write, it also
-    syncs a decision-log row and pipeline-status.md to DOCS_PATH (the VPS
-    docs directory), replacing the manual !scribe Discord ritual for CLI
-    sessions.
+    syncs a decision-log row and pipeline-status.md to DOCS_PATH (the ai-agents
+    clone), then auto-pushes those docs to GitHub — replacing the manual !scribe
+    Discord ritual for CLI sessions.
 
 DESIGN DECISIONS:
 - Import Groq at module level rather than inside _call_groq. Alternative was
@@ -36,9 +36,22 @@ DESIGN DECISIONS:
   an intentional tradeoff documented here rather than using a ``# noqa`` comment.
 - Docs sync (DOCS_PATH) is always a soft operation: DOCS_PATH not set or
   directory missing both print a message and continue without returning 1.
-  Reason: the VPS docs directory may not be locally mounted; close-session
+  Reason: the ai-agents clone may not be locally mounted; close-session
   should not fail because of a remote path that is legitimately absent on the
   local machine.
+- Auto-push (git add/commit/push in DOCS_PATH) is also always soft — push
+  failure never causes return 1. Docs are written locally before the push
+  attempt, so session data is preserved even when the remote is unreachable.
+  Alternative was making push failure fatal. Rejected because a transient
+  network error at session-close would block the developer from moving on.
+  All git operations inside _push_docs are wrapped in try/except to handle
+  subprocess.TimeoutExpired (network hang), FileNotFoundError (git not in
+  PATH), and any other unexpected exception — all emit a warning to stderr
+  and return gracefully.
+- _is_git_repo uses ``git rev-parse --is-inside-work-tree`` rather than
+  checking for a ``.git`` directory. Alternative was ``Path.exists(".git")``.
+  Rejected because git worktrees have no ``.git`` directory in subdirectories
+  but are still valid repos; rev-parse handles all cases correctly.
 - GROQ_HEAVY_MODEL (llama-3.3-70b-versatile) is used for structured JSON
   extraction from the sprint review output. The 8b model produces conversational
   prose; extracting component/decision/status/next_action from that prose needs
@@ -57,6 +70,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -109,6 +123,10 @@ _DECISION_LOG_HEADER = (
     "| Date | Component | Decision Made | Status | Next Action |\n"
     "|------|-----------|--------------|--------|-------------|\n"
 )
+
+# Commit message template for auto-push to GitHub. Format uses UTC timestamp
+# so git log reads chronologically and is unambiguous across timezones.
+_DOCS_COMMIT_FMT: str = "sync: session docs {dt}"
 
 # Maps next_action values to CLI commands for STATE.md — mirrors the routing
 # table in pause.py. Kept here rather than imported to avoid coupling
@@ -570,23 +588,156 @@ def _build_pipeline_status(state: dict[str, Any], groq_output: str) -> str:
     )
 
 
+def _is_git_repo(path: Path) -> bool:
+    """Return True if path is inside a git repository.
+
+    Why it exists: Before running git add/commit/push in DOCS_PATH, we need
+    to confirm it is actually a git repo. Passing a non-repo path to git
+    produces cryptic fatal errors; this explicit check lets _push_docs print
+    a clear warning and skip the push instead of surfacing a confusing git
+    error message.
+
+    Uses ``git rev-parse --is-inside-work-tree`` rather than checking for a
+    ``.git`` directory — see module DESIGN DECISIONS for the rationale.
+
+    Args:
+        path: Directory to check.
+
+    Returns:
+        True if git reports this path is inside a work tree, False otherwise.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _push_docs(docs_path: Path) -> None:
+    """Run git add / commit / push in DOCS_PATH to sync session docs to GitHub.
+
+    Why it exists: Closes the gap between local doc writes and the remote
+    repository. Without this step, docs accumulate locally and must be pushed
+    manually — which was the previous "!scribe" Discord ritual this command is
+    designed to eliminate. GitHub becomes the single source of truth immediately
+    after every session.
+
+    Always a soft operation — no step here causes run_close_session to return
+    1. Session docs are written locally before this is called, so the session
+    summary is preserved even when the push fails or the repo is unavailable.
+
+    Exception handling:
+    - subprocess.TimeoutExpired: git hung on network I/O → warn, skip
+    - FileNotFoundError: git not in PATH → warn, skip
+    - Exception: any other unexpected error → warn with message, skip
+
+    Args:
+        docs_path: Directory that was written to by _sync_docs. Must be the
+                   root or a subdirectory of the git repository to push.
+
+    Returns:
+        None. Warnings are echoed to stderr; no exceptions propagate.
+    """
+    if not _is_git_repo(docs_path):
+        # Not a git repo — cannot push. Warn and continue; docs are still
+        # written locally so no session data is lost.
+        typer.echo(
+            f"warning: DOCS_PATH {docs_path} is not a git repo — skipping push",
+            err=True,
+        )
+        return
+
+    dt = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    commit_msg = _DOCS_COMMIT_FMT.format(dt=dt)
+
+    try:
+        # Stage docs/ only — not the full repo. Safe even if DOCS_PATH contains
+        # unrelated untracked files in other subdirectories.
+        subprocess.run(
+            ["git", "add", "docs/"],
+            cwd=docs_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        # Commit — capture_output keeps git's commit summary out of bricklayer's
+        # stdout. check=False because "nothing to commit" exits 1 on some git
+        # versions and that is not an error we want to surface.
+        subprocess.run(
+            ["git", "commit", "-m", commit_msg],
+            cwd=docs_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        # Push — failure is non-fatal: docs are already written locally.
+        # Print a warning so the user knows to push manually if needed.
+        push_result = subprocess.run(
+            ["git", "push"],
+            cwd=docs_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+        if push_result.returncode != 0:
+            typer.echo(
+                "warning: git push failed — docs written locally but not pushed to GitHub. "
+                f"Run 'git push' in {docs_path} to sync manually.",
+                err=True,
+            )
+            return
+
+        typer.echo("Docs pushed to GitHub")
+
+    except subprocess.TimeoutExpired:
+        # Network hung beyond the timeout — push is skipped but docs are safe.
+        typer.echo(
+            "warning: git push timed out, skipping — docs written locally.",
+            err=True,
+        )
+    except FileNotFoundError:
+        # git binary not found in PATH on this machine — push is impossible.
+        typer.echo(
+            "warning: git not found in PATH, skipping push — docs written locally.",
+            err=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — all push failures are soft
+        # Catch-all so an unexpected error never crashes close-session.
+        typer.echo(
+            f"warning: docs push failed: {exc}, skipping — docs written locally.",
+            err=True,
+        )
+
+
 def _sync_docs(
     api_key: str,
     state: dict[str, Any],
     groq_output: str,
     heavy_model: str = GROQ_HEAVY_MODEL,
 ) -> None:
-    """Sync decision-log.md and pipeline-status.md to DOCS_PATH if set.
+    """Sync decision-log.md and pipeline-status.md to DOCS_PATH if set, then push.
 
     Why it exists: Replaces the manual !scribe Discord ritual for CLI sessions.
     After a successful Groq sprint review, this writes the structured summary
-    directly to the VPS docs directory. Always a soft operation — missing or
-    unset DOCS_PATH is not a failure (VPS may not be mounted locally).
+    to the local ai-agents clone and then auto-pushes to GitHub so the remote
+    is always current after every session. Always a soft operation — missing or
+    unset DOCS_PATH is not a failure (clone may not be present locally).
 
     Args:
         api_key: Groq API key — forwarded to _extract_structured_data.
         state: Parsed state.json dict.
         groq_output: Sprint review text returned by the first (8b) Groq call.
+        heavy_model: Model name for _extract_structured_data heavy call.
     """
     docs_path_str = os.environ.get("DOCS_PATH")
     if not docs_path_str:
@@ -609,6 +760,9 @@ def _sync_docs(
     (docs_path / "pipeline-status.md").write_text(status_content, encoding="utf-8")
 
     typer.echo(f"Docs synced to {docs_path}")
+
+    # Auto-push to GitHub — always soft, never causes return 1.
+    _push_docs(docs_path)
 
 
 def run_close_session(root: Path, yaml_path: Path) -> int:

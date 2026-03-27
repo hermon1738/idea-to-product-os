@@ -194,9 +194,8 @@ def load(path: Path | str) -> dict[str, Any]:
     p = Path(path)
     if not p.exists():
         if not p.parent.exists():
-            # Parent directory missing — cannot auto-create. Raise before
-            # read_text() so the error message names the intended path rather
-            # than surfacing a lower-level OSError from the OS.
+            # Parent directory missing — cannot auto-create. Create it so
+            # fresh-repo users get state.json bootstrapped automatically.
             p.parent.mkdir(parents=True, exist_ok=True)
 
         # Parent directory exists but state.json is absent — this is a fresh

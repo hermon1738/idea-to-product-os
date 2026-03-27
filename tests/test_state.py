@@ -150,20 +150,21 @@ def test_write_wrong_type_completed_bricks_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Missing state.json — parent absent: load → FileNotFoundError
+# Missing state.json — parent absent: load → auto-create (mkdir + defaults)
 # ---------------------------------------------------------------------------
 
 
-def test_load_missing_file_raises_file_not_found(tmp_path: Path) -> None:
-    """load() raises FileNotFoundError when parent directory also doesn't exist.
+def test_load_autocreate_with_missing_parent(tmp_path: Path) -> None:
+    """load() auto-creates state.json even when parent directory does not exist.
 
-    Auto-create only fires when the parent directory exists. When the parent
-    is also absent there is no safe place to write defaults, so the function
-    must still raise rather than silently creating nested directories.
+    mkdir(parents=True) creates the full directory tree so fresh-repo users
+    whose bricklayer/ directory has never been created get a valid state.json
+    automatically on first command invocation (Brick 26).
     """
     missing = tmp_path / "nonexistent" / "state.json"
-    with pytest.raises(FileNotFoundError):
-        load(missing)
+    result = load(missing)
+    assert missing.exists(), "state.json must be created by load()"
+    assert "current_brick" in result
 
 
 # ---------------------------------------------------------------------------

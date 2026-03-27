@@ -1,5 +1,5 @@
 {
-  "current_brick": "Brick 28 - Auto-push docs after close-session",
+  "current_brick": "",
   "status": "COMPLETED",
   "loop_count": 0,
   "last_gate_failed": null,
@@ -18,7 +18,7 @@
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
   },
-  "current_branch": "brick/28-auto-push-docs",
+  "current_branch": "feature/auto-push-docs",
   "current_feature": "feature/auto-push-docs",
-  "current_phase": "phase/28-doc-push"
+  "current_phase": null
 }

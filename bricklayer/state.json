@@ -18,7 +18,7 @@
     "artifact": "skeptic_packet/test_output.txt",
     "failed_nodeids": []
   },
-  "current_branch": "feature/auto-push-docs",
-  "current_feature": "feature/auto-push-docs",
+  "current_branch": "main",
+  "current_feature": null,
   "current_phase": null
 }

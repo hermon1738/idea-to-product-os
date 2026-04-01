@@ -1,3 +1,2 @@
 LANGUAGE: Python
-TEST_COMMAND: python3 -m pytest -q ../tests/
-
+TEST_COMMAND: python3 -m pytest -v ../tests/

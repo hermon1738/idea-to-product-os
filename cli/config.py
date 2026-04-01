@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +115,73 @@ def find_yaml(start: Path | None = None) -> Path | None:
         current = parent
 
 
+def _write_context_txt(root: Path, config: dict[str, Any]) -> None:
+    """Write bricklayer/context.txt from the test: section of bricklayer.yaml.
+
+    WHY THIS EXISTS:
+        context.txt stores LANGUAGE and TEST_COMMAND so bricklayer build tools
+        know how to run the test suite without hard-coding anything. Before this
+        function existed, context.txt was edited by hand, which meant it would
+        silently drift whenever someone changed test.command in bricklayer.yaml
+        without remembering to also update context.txt. Writing it automatically
+        on every startup means the two can never diverge.
+
+    Rules:
+    - test: section absent → warning to stderr, return without touching context.txt.
+    - test.command absent → exit 1 with a clear error message.
+    - bricklayer/ directory absent → create it before writing.
+    - Write is atomic: content goes to a tempfile in the same directory, then
+      os.replace() swaps it in. Prevents a partial write from leaving a
+      truncated context.txt if the process is interrupted mid-write.
+
+    Args:
+        root: Project root (directory that contains bricklayer.yaml).
+        config: Parsed bricklayer.yaml config dict (already validated).
+    """
+    test_section = config.get("test")
+    if test_section is None:
+        typer.echo(
+            "warning: no test: section in bricklayer.yaml — context.txt not updated",
+            err=True,
+        )
+        return
+
+    command: str | None = test_section.get("command") if isinstance(test_section, dict) else None
+    if not command:
+        typer.echo(
+            "error: test: section is missing required field 'command'",
+            err=True,
+        )
+        sys.exit(1)
+
+    language: str = (
+        test_section.get("language", "Python")
+        if isinstance(test_section, dict)
+        else "Python"
+    )
+
+    context_dir = root / "bricklayer"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    context_path = context_dir / "context.txt"
+
+    content = f"LANGUAGE: {language}\nTEST_COMMAND: {command}\n"
+
+    # Atomic write: write to a tempfile in the same directory, then rename.
+    # Same-directory tempfile ensures os.replace is a rename, not a cross-device copy.
+    fd, tmp_path_str = tempfile.mkstemp(dir=context_dir, prefix=".context_", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp_path_str, context_path)
+    except Exception:
+        # Clean up the tempfile if anything went wrong before the rename.
+        try:
+            os.unlink(tmp_path_str)
+        except OSError:
+            pass
+        raise
+
+
 def load_and_validate(yaml_path: Path | None = None) -> dict[str, Any]:
     """Load bricklayer.yaml, resolve all declared paths, exit 1 on any failure.
 
@@ -180,5 +248,7 @@ def load_and_validate(yaml_path: Path | None = None) -> dict[str, Any]:
         for m in missing:
             typer.echo(f"Missing: {m} — check bricklayer.yaml", err=True)
         sys.exit(1)
+
+    _write_context_txt(base, config)
 
     return config

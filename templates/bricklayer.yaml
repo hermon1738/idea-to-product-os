@@ -29,6 +29,13 @@ tools:
 
 agents: {}
 
+# Test configuration — written to bricklayer/context.txt automatically on every
+# bricklayer command. Changing test.command here updates context.txt instantly;
+# no manual editing of context.txt is needed or permitted.
+test:
+  language: Python
+  command: python3 -m pytest -v ../tests/
+
 # LLM configuration for bricklayer close-session.
 # bricklayer auto-loads .env from the same directory as this file — no manual
 # sourcing required. Copy templates/env.example to .env and fill in your keys.

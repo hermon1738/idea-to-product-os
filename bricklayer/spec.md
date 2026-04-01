@@ -1,51 +1,67 @@
-BRICK: Docs — Repo Documentation Update
+BRICK: bricklayer-cli — Test Command Config
 
 WHAT:
-  Update the idea-to-product-os repo documentation to accurately
-  reflect the current pipeline — a general-purpose software planning
-  and build system, not an AI agent company tool.
+  Add test: section to bricklayer.yaml. On startup, CLI reads
+  test.command and test.language from bricklayer.yaml and writes
+  bricklayer/context.txt automatically. context.txt is never written
+  manually again.
 
 INPUT:
-  Current README.md and docs/pipeline.md
+  Current CLI load_and_validate() in cli/main.py and cli/config.py.
+  Current templates/bricklayer.yaml.
 
 OUTPUT:
-  Updated README.md and docs/pipeline.md
+  bricklayer.yaml has test: section. CLI writes context.txt on every
+  startup from yaml values. Changing test command is a one-line edit
+  in bricklayer.yaml.
 
 GATE:
-  - README accurately describes all pipeline stages in correct order
-  - Every system file listed with its role
-  - No references to "AI agent company" or old Org Schema format
-  - Pipeline diagram matches what the system actually does
-  - docs/pipeline.md exists and has all 9 sections
+  - bricklayer --help on a project with test: in bricklayer.yaml writes
+    correct context.txt automatically
+  - changing test.command in bricklayer.yaml and running any bricklayer
+    command updates context.txt
+  - missing test: section — CLI warns but does not fail; context.txt
+    left unchanged if it already exists
+  - context.txt write is atomic (temp file then rename)
+  - all new tests pass
 
 BLOCKER:
-  New contributors will run the wrong workflow if docs describe the old system.
+  context.txt can never go out of sync with bricklayer.yaml.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- README.md
-- docs/pipeline.md
+- cli/main.py
+- cli/config.py
+- templates/bricklayer.yaml
+- bricklayer.yaml
+- tests/test_config_write.py
 - bricklayer/spec.md
+- bricklayer/context.txt
 - bricklayer/state.json
 
 ACCEPTANCE CRITERIA:
-1) README section 1 (WHAT THIS IS) describes a general-purpose build pipeline
-2) README pipeline diagram includes Venture OS, arch-brain, Agent-OS, plan-brain, Claude Code, Bricklayer CLI
-3) README system files table includes arch-brain.md
-4) Agent-OS listed as conditional (only if AI Layer exists)
-5) No reference to "AI agent company" or old Org Schema format anywhere
-6) README includes Product Types section (AGENT, WEB_APP, SYSTEM, CLI_TOOL)
-7) README Quick Start matches the actual current workflow
-8) docs/pipeline.md exists and contains all 9 sections
-9) Both files are non-empty and readable
+1) load_and_validate with test.command and test.language writes correct
+   context.txt at bricklayer/context.txt
+2) load_and_validate without test: section leaves existing context.txt
+   unchanged and prints warning to stderr
+3) load_and_validate with test: section but missing command field exits
+   with clear error message
+4) context.txt written atomically (temp file then os.replace)
+5) templates/bricklayer.yaml has test: section with -v flag
+6) bricklayer.yaml (root) has test: section
+7) _write_context_txt has WHY THIS EXISTS docstring
 
 TEST REQUIREMENTS:
-- N/A (docs brick) — confirm both files exist and are non-empty
+- load_and_validate with test.command and test.language writes correct context.txt
+- load_and_validate without test: section leaves existing context.txt unchanged
+- load_and_validate with test: section but missing command field exits with error
+- context.txt written with -v flag when test.command contains -v
+- context.txt written atomically (temp file then rename)
 
 OUT OF SCOPE:
 - Any file outside the FILES list
-- Changes to system-prompts/ files
-- Changes to CLI source code
-- Changes to tests
+- Changes to bricklayer/tools/
+- Changes to other CLI commands
+- Changes to tests/ other than adding tests/test_config_write.py

@@ -14,6 +14,12 @@ tools:
 agents:
   nanobot_template: agents/nanobot-template/
 
+# Test configuration — written to bricklayer/context.txt automatically on every
+# bricklayer command. Changing test.command here updates context.txt instantly.
+test:
+  language: Python
+  command: python3 -m pytest -v ../tests/
+
 llm:
   provider: groq
   model: llama-3.1-8b-instant

@@ -12,8 +12,33 @@ ROOT = Path.cwd()
 PACKET_DIR = ROOT / "skeptic_packet"
 SPEC_SRC = ROOT / "spec.md"
 STATE_SRC = ROOT / "state.json"
+CONTEXT_PATH = ROOT / "context.txt"
 
-TEST_CMD = ["python3", "-m", "pytest", "-q"]
+
+def _parse_test_command() -> list[str]:
+    """Read TEST_COMMAND from context.txt and return as argv list.
+
+    Why it exists: make_skeptic_packet previously used a hardcoded
+    pytest command with no path argument, causing it to run pytest
+    against the bricklayer/ CWD and find no tests (exit 5). Reading
+    from context.txt makes the skeptic packet use the same test command
+    as run_tests_and_capture, ensuring consistent results.
+
+    Returns:
+        Parsed argv list from TEST_COMMAND line in context.txt.
+        Falls back to ["python3", "-m", "pytest", "-q"] if not found.
+    """
+    import shlex
+    if CONTEXT_PATH.exists():
+        for line in CONTEXT_PATH.read_text(encoding="utf-8").splitlines():
+            if line.startswith("TEST_COMMAND:"):
+                cmd = line.split(":", 1)[1].strip()
+                if cmd:
+                    return shlex.split(cmd)
+    return ["python3", "-m", "pytest", "-q"]
+
+
+TEST_CMD = _parse_test_command()
 STATE_KEYS = [
     "current_brick",
     "status",

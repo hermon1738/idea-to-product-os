@@ -1,6 +1,6 @@
 {
   "current_brick": "Docs \u2014 Repo Documentation Update",
-  "status": "IN_PROGRESS",
+  "status": "COMPLETED",
   "loop_count": 0,
   "last_gate_failed": null,
   "completed_bricks": [
@@ -8,9 +8,10 @@
     "Brick 25 - auto-.env loading + LLM config from bricklayer.yaml",
     "Brick 26 - null state fields + missing state.json",
     "Brick 27 - Fix close-session prompt quality",
-    "Brick 28 - Auto-push docs after close-session"
+    "Brick 28 - Auto-push docs after close-session",
+    "Docs \u2014 Repo Documentation Update"
   ],
-  "next_action": "skeptic_packet_ready",
+  "next_action": "Select and prepare next brick",
   "last_test_run": {
     "command": "N/A \u2014 docs brick",
     "status": "PASS",

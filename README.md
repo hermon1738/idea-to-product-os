@@ -1,69 +1,116 @@
 # Idea-to-Product OS
 
-A pipeline for turning ideas into running AI organizations.
-You are the Co-CEO. AI agents are your employees.
-Every build is gated, reviewed, and logged.
+A general-purpose software planning and build pipeline that takes any software idea
+from concept to deployed code — brick by brick.
 
 ---
 
 ## What This Is
 
-A system for running AI-powered software businesses with minimal manual overhead.
-The pipeline takes you from a raw idea all the way to deployed, running agents —
-with structured review at every step so nothing ships without being challenged.
+A structured pipeline for turning software ideas into shipped products.
+The system works for any product type: AI agents, web apps, backend systems, CLI tools.
+Every stage is gated. Nothing moves forward without approval. Nothing ships without being challenged.
 
-The human handles judgment, approvals, and external relationships.
-Agents handle the repeatable operational work.
+The human (Co-CEO) handles judgment, approvals, and architecture decisions.
+AI tools handle implementation, review, and documentation — one verified brick at a time.
 
-**Current state:** Pipeline Phases 1–7 operational. Bricklayer CLI (Phases 4–6)
-ships with 408 tests. Three live agents on Hetzner VPS.
+**Current state:** Bricklayer CLI operational with 408 tests. Pipeline phases 1–7 running.
 
 ---
 
-## How It Works
+## How the Pipeline Works
 
 ```
-  [A] GitHub repo    [B] Raw idea    [C] Clear concept    [D] Written spec
-       │                  │                │                     │
-       ▼                  ▼                │                     │
-  Phase 1            Phase 2              │                     │
-  Repo Auditor    ── Venture OS           │                     │
-  evaluate repo      stress-test idea     │                     │
-       │                  │               │                     │
-       └─────────┬────────┘               │                     │
-                 ▼                        │                     │
-            Phase 3 ◀────────────────────┘                     │
-            Agent-OS                                            │
-            design agents + PROJECT BRIEF                       │
-                 │                                              │
-                 └────────────────────────┬─────────────────────┘
-                                          ▼
-                                     Phase 4
-                                  Bricklayer Plan
-                                  break work into bricks
-                                          │
-                              ┌───────────▼───────────┐
-                              │    BUILD LOOP          │
-                              │  Builder AI implements │
-                              │  Skeptic AI reviews    │──── FAIL ──▶ fix & retry
-                              │  Verdict: PASS         │             (max 3 loops)
-                              └───────────┬───────────┘
-                                          │ PASS
-                                          ▼
-                                     Phase 6            Phase 7
-                                  Sprint Review  ──▶  Session Scribe
-                                  close brick         log session
-                                  plan next           keep context live
-                                          │
-                                          ▼
-                              DEPLOYED AGENT ORGANIZATION
-                              Hetzner VPS · Docker · Discord
+Idea
+ ↓
+Venture OS ─→ Org Schema + Phase Confirmation
+ ↓
+arch-brain ─→ ARCHITECTURE.md (approved)
+ ↓
+Agent-OS    ← only if AI Layer exists
+ ↓
+plan-brain ─→ phases + bricks
+ ↓
+Claude Code ─→ one brick at a time
+ ↓
+Bricklayer CLI ─→ gates, state, branches
 ```
 
-Not every idea starts at Phase 1.
-See [`docs/pipeline.md`](docs/pipeline.md) for entry points and phase details,
-or [`docs/workflow.md`](docs/workflow.md) for the full visual flow including the
-build loop, git branching model, and session lifecycle.
+**Venture OS** — stress-tests the idea, maps it to architecture layers, confirms phases
+with the Co-CEO before proceeding. No build starts without this gate.
+
+**arch-brain** — takes the confirmed schema, runs an architecture options session,
+and produces `docs/ARCHITECTURE.md` — the single source of truth for the entire build.
+Two approval gates before the document is locked. All downstream planning loads this file.
+
+**Agent-OS** — designs AI components: agent hierarchy, triggers, inputs, outputs, tools,
+failure modes. Only runs when the architecture includes an AI layer. Skipped for
+products without AI (web apps, CLI tools, pure backend systems).
+
+**plan-brain** — receives the approved architecture, breaks the build into phases and bricks.
+Every brick has a FILES list, Acceptance Criteria, Test Requirements, and Out of Scope.
+Every handoff loads `ARCHITECTURE.md` to stay aligned.
+
+**Bricklayer CLI** — manages state, branches, gates, and sessions. Claude Code (or any
+builder AI) works one brick at a time through a gated build loop: implement → verify →
+test → skeptic review → PASS → close.
+
+See [`docs/pipeline.md`](docs/pipeline.md) for a deep reference on each stage.
+
+---
+
+## System Files
+
+| File | Role | When to load |
+|------|------|--------------|
+| `system-prompts/venture-os.md` | Idea stress-test + Org Schema | Start of any new idea |
+| `system-prompts/arch-brain.md` | Architecture session → ARCHITECTURE.md | After Venture OS phase confirmation |
+| `system-prompts/agent-os.md` | AI layer design | Only when Org Schema has an AI Layer |
+| `system-prompts/plan-brain.md` | Brick planning | After ARCHITECTURE.md is approved |
+| `system-prompts/sprint-brain.md` | Sprint review after each brick | End of every build session |
+| `system-prompts/repo-auditor.md` | GitHub repo audit → project briefs | When evaluating external repos |
+| `system-prompts/stack-rules.md` | Stack defaults + code architecture standards | Referenced by all other files |
+| `context/decision-log.md` | Append-only session history | Updated after every session |
+| `context/pipeline-status.md` | Current state snapshot | Updated each session |
+
+---
+
+## Product Types
+
+The pipeline supports four product types. The architecture stage determines which apply.
+
+- **AGENT** — An AI agent or multi-agent system with memory, cron, or tool-calling.
+- **WEB_APP** — A user-facing web application with frontend, backend, and database layers.
+- **SYSTEM** — A backend service, API, or infrastructure component without a UI.
+- **CLI_TOOL** — A command-line tool for developer or operator use.
+
+Stack defaults and code standards for each type are in `system-prompts/stack-rules.md`.
+
+---
+
+## Quick Start
+
+**Step 1** — Load `system-prompts/venture-os.md` into any AI chat. Describe your idea.
+
+**Step 2** — Confirm phases from the Org Schema output. Do not proceed until the Co-CEO approves.
+
+**Step 3** — Load `system-prompts/arch-brain.md`. Run the architecture session. Approve two gates.
+
+**Step 4** — Approve `docs/ARCHITECTURE.md`. This document is now locked as the source of truth.
+
+**Step 5** — Load `system-prompts/plan-brain.md`. Hand it the approved architecture. Generate build plan.
+
+**Step 6** — Hand Brick 1 to Claude Code (or any builder AI). Follow the bricklayer build loop.
+
+**Step 7** — After each brick closes, run `system-prompts/sprint-brain.md` for sprint review.
+
+---
+
+## Infrastructure
+
+Hetzner VPS CPX21, Docker CE, Groq free tier, Discord for agent control.
+Target cost: ~$30/mo. Three live agents currently running on the VPS.
+Agent source lives at [hermon1738/ai-agents](https://github.com/hermon1738/ai-agents).
 
 ---
 
@@ -101,26 +148,13 @@ cp /path/to/idea-to-product-os/templates/env.example .env
 Open `bricklayer.yaml` and replace every `/path/to/idea-to-product-os`
 with the absolute path to your actual installation.
 
-Example — if your OS lives at `/Users/tony/projects/idea-to-product-os`:
-
-```yaml
-phases:
-  plan:   /Users/tony/projects/idea-to-product-os/system-prompts/plan-brain.md
-  review: /Users/tony/projects/idea-to-product-os/system-prompts/sprint-brain.md
-
-tools:
-  verify:  /Users/tony/projects/idea-to-product-os/bricklayer/tools/verify_files_touched.py
-  # ... etc
-```
-
 **Step 3 — Verify:**
 
 ```bash
 bricklayer --help
 ```
 
-The CLI validates every path on startup and tells you exactly which ones
-are missing before anything runs.
+The CLI validates every path on startup and tells you exactly which ones are missing.
 
 **Step 4 — Start building:**
 
@@ -130,9 +164,6 @@ bricklayer branch --phase 1 scaffold
 bricklayer branch 1 first-brick
 bricklayer status
 ```
-
-Your project repo stays clean — no bricklayer source, no tools, no tests.
-Just your product code and `bricklayer.yaml`.
 
 ---
 
@@ -151,18 +182,19 @@ idea-to-product-os/
 │   └── bricklayer.yaml         ← copy this into any new project
 │
 ├── system-prompts/             ← AI-agnostic phase prompts
-│   ├── venture-os.md           ← Phase 2: idea strategy
-│   ├── agent-os.md             ← Phase 3: agent design
-│   ├── plan-brain.md           ← Phase 4: build planning
-│   ├── sprint-brain.md         ← Phase 6: sprint review
-│   ├── repo-auditor.md         ← Phase 1: repo evaluation
+│   ├── venture-os.md           ← idea stress-test + Org Schema
+│   ├── arch-brain.md           ← architecture session → ARCHITECTURE.md
+│   ├── agent-os.md             ← AI layer design (conditional)
+│   ├── plan-brain.md           ← brick planning
+│   ├── sprint-brain.md         ← sprint review after each brick
+│   ├── repo-auditor.md         ← GitHub repo evaluation
 │   └── stack-rules.md          ← engineering standards (apply everywhere)
 │
 ├── docs/                       ← human documentation
-│   ├── pipeline.md             ← full pipeline explained, entry points
+│   ├── pipeline.md             ← deep reference: each stage explained
 │   ├── workflow.md             ← visual ASCII workflow diagram
 │   ├── getting-started.md      ← setup guide for new machines
-│   ├── architecture.md         ← system map, live agents, three repos
+│   ├── architecture.md         ← system map and live infrastructure
 │   └── vision.md               ← where this is going
 │
 ├── cli/                        ← bricklayer CLI source (Python)
@@ -211,29 +243,7 @@ bricklayer close-feature             # merge feature → main
 bricklayer pause                     # save session state
 bricklayer commit -m "msg"           # mid-brick checkpoint commit
 bricklayer close-session             # sprint review + log
-bricklayer new-project <name>        # scaffold a new project
-bricklayer context [--project <n>]   # print project context for AI session
-bricklayer agent list                # list all agents in registry
-bricklayer agent status --id <id>    # full detail for one agent
-bricklayer agent new --id <id> \
-  --runtime nanobot|raw-python \
-  --project <project> --role <role>  # scaffold + register a new agent
-bricklayer agent deploy --id <id>    # push agent to deploy repo, print VPS cmds
-bricklayer agent live --id <id>      # mark agent live after VPS confirmation
 ```
-
----
-
-## Live Agents
-
-Three agents running on Hetzner VPS.
-Source: [hermon1738/ai-agents](https://github.com/hermon1738/ai-agents).
-
-| Agent | Trigger | Job |
-|-------|---------|-----|
-| Session Scribe | `!scribe` in Discord | Logs sessions, updates decision-log.md and pipeline-status.md |
-| Org Schema Formatter | `!schema` in Discord | Converts Co-CEO session dump to structured Org Schema |
-| Assignment Dispatcher | `!dispatch` in Discord | Converts Org Schema → one Bricklayer brief per agent |
 
 ---
 
@@ -241,7 +251,7 @@ Source: [hermon1738/ai-agents](https://github.com/hermon1738/ai-agents).
 
 | Document | What it answers |
 |----------|----------------|
-| [`docs/pipeline.md`](docs/pipeline.md) | How does the full pipeline work? |
+| [`docs/pipeline.md`](docs/pipeline.md) | How does the full pipeline work? Why is it structured this way? |
 | [`docs/workflow.md`](docs/workflow.md) | Visual ASCII diagram of the full flow |
 | [`docs/getting-started.md`](docs/getting-started.md) | How do I set this up on a new machine? |
 | [`docs/architecture.md`](docs/architecture.md) | How do all the pieces connect? |

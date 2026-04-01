@@ -1,78 +1,51 @@
-BRICK: Brick 28 (revision) - Auto-push docs after close-session
+BRICK: Docs — Repo Documentation Update
 
 WHAT:
-  After bricklayer close-session writes docs to DOCS_PATH,
-  automatically run git add + git commit + git push in
-  the DOCS_PATH directory. GitHub becomes the single
-  source of truth immediately after every session.
-
-  Revision fixes three issues from the original Brick 28 attempt:
-  1. _push_docs does not handle subprocess.TimeoutExpired or
-     FileNotFoundError — both crash the CLI instead of warning.
-  2. cli/state.py was regressed — FileNotFoundError was introduced
-     instead of the Brick 26 auto-create (p.parent.mkdir).
-  3. No tests for timeout and FileNotFoundError error paths.
+  Update the idea-to-product-os repo documentation to accurately
+  reflect the current pipeline — a general-purpose software planning
+  and build system, not an AI agent company tool.
 
 INPUT:
-  DOCS_PATH env var (path to local ai-agents clone)
+  Current README.md and docs/pipeline.md
 
 OUTPUT:
-  After writing docs:
-  → cd DOCS_PATH
-  → git add docs/
-  → git commit -m "sync: session docs YYYY-MM-DD HH:MM"
-  → git push
-  → prints "Docs pushed to GitHub"
-
-  DOCS_PATH not set → skip silently (existing behavior)
-  DOCS_PATH set but not a git repo → warning, skip push
-  git push fails → warning printed, exit 0
-  git times out → warning printed, exit 0
-  git not in PATH → warning printed, exit 0
-    (docs are written locally — push failure is never fatal)
+  Updated README.md and docs/pipeline.md
 
 GATE:
-  RUNS -- run close-session with --summary and DOCS_PATH
-  set. Confirm docs written AND pushed to GitHub in one
-  command. Check git log in ai-agents clone shows new
-  commit.
+  - README accurately describes all pipeline stages in correct order
+  - Every system file listed with its role
+  - No references to "AI agent company" or old Org Schema format
+  - Pipeline diagram matches what the system actually does
+  - docs/pipeline.md exists and has all 9 sections
 
 BLOCKER:
-  Nothing. But sync stays broken without this.
+  New contributors will run the wrong workflow if docs describe the old system.
 
 WAVE:
   SEQUENTIAL
 
 FILES:
-- cli/commands/close_session.py
-- cli/state.py
-- tests/test_close_session.py
-- tests/test_state.py
-- tests/test_next.py
-- tests/test_status.py
+- README.md
+- docs/pipeline.md
 - bricklayer/spec.md
 - bricklayer/state.json
 
 ACCEPTANCE CRITERIA:
-1) DOCS_PATH set, valid git repo → docs written + pushed, exit 0
-2) DOCS_PATH set, not a git repo → warning, exit 0 (not fatal)
-3) git push fails (non-zero exit) → warning printed, exit 0
-4) DOCS_PATH not set → skip entirely, exit 0
-5) Commit message format: "sync: session docs YYYY-MM-DD HH:MM"
-6) subprocess.TimeoutExpired → warning to stderr, exit 0, no crash
-7) FileNotFoundError (git not in PATH) → warning to stderr, exit 0, no crash
-8) cli/state.py contains p.parent.mkdir(parents=True, exist_ok=True)
+1) README section 1 (WHAT THIS IS) describes a general-purpose build pipeline
+2) README pipeline diagram includes Venture OS, arch-brain, Agent-OS, plan-brain, Claude Code, Bricklayer CLI
+3) README system files table includes arch-brain.md
+4) Agent-OS listed as conditional (only if AI Layer exists)
+5) No reference to "AI agent company" or old Org Schema format anywhere
+6) README includes Product Types section (AGENT, WEB_APP, SYSTEM, CLI_TOOL)
+7) README Quick Start matches the actual current workflow
+8) docs/pipeline.md exists and contains all 9 sections
+9) Both files are non-empty and readable
 
 TEST REQUIREMENTS:
-- DOCS_PATH set, valid git repo → docs written + pushed, exit 0
-- DOCS_PATH set, not a git repo → warning, exit 0 (not fatal)
-- git push fails → warning printed, exit 0
-- DOCS_PATH not set → skip entirely, exit 0
-- subprocess.TimeoutExpired in push → warning to stderr, exit 0
-- FileNotFoundError in push → warning to stderr, exit 0
+- N/A (docs brick) — confirm both files exist and are non-empty
 
 OUT OF SCOPE:
 - Any file outside the FILES list
-- Changing the Groq provider/model selection logic
-- Changing the output format of decision-log or pipeline-status
-- Any other git operations beyond add/commit/push in DOCS_PATH
+- Changes to system-prompts/ files
+- Changes to CLI source code
+- Changes to tests

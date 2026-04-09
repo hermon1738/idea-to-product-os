@@ -97,6 +97,8 @@ def get_tool_path(config: dict[str, Any], tool_name: str, root: Path) -> Path | 
     if rel is None:
         # The key is absent or explicitly null — caller decides what to do.
         return None
+    import os as _os
+    rel = _os.path.expandvars(rel)
     p = Path(rel)
     if not p.is_absolute():
         # Relative paths in bricklayer.yaml are always relative to the YAML

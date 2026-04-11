@@ -234,7 +234,7 @@ def load_and_validate(yaml_path: Path | None = None) -> dict[str, Any]:
                 # Explicit null in YAML means "not configured"; skip.
                 continue
             rel_path = os.path.expandvars(rel_path)
-            p = Path(rel_path)
+            p = Path(os.path.expandvars(rel_path))
             if not p.is_absolute():
                 # Relative paths are resolved against the YAML file's directory,
                 # not cwd, so the config works regardless of where bricklayer

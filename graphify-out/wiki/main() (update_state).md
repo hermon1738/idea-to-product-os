@@ -1,0 +1,17 @@
+---
+source_file: "graphify-out/wiki/community-39-state-updater-tool.md"
+type: "code"
+community: "State Updater Tool"
+tags:
+  - graphify/code
+  - graphify/INFERRED
+  - community/State_Updater_Tool
+---
+
+# main() (update_state)
+
+## Connections
+- [[has_pass_verdict()_1]] - `calls` [INFERRED]
+- [[load_state()_2]] - `calls` [INFERRED]
+
+#graphify/code #graphify/INFERRED #community/State_Updater_Tool

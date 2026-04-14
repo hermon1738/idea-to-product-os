@@ -1,0 +1,16 @@
+---
+source_file: "graphify-out/wiki/community-32-new-project-module.md"
+type: "document"
+community: "State Read Write Module"
+tags:
+  - graphify/document
+  - graphify/EXTRACTED
+  - community/State_Read_Write_Module
+---
+
+# Return an error message if name is invalid rationale
+
+## Connections
+- [[_validate_name()_1]] - `rationale_for` [EXTRACTED]
+
+#graphify/document #graphify/EXTRACTED #community/State_Read_Write_Module

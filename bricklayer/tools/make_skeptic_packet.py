@@ -13,6 +13,14 @@ PACKET_DIR = ROOT / "skeptic_packet"
 SPEC_SRC = ROOT / "spec.md"
 STATE_SRC = ROOT / "state.json"
 CONTEXT_PATH = ROOT / "context.txt"
+GRAPHIFY_OUT_DIR = ROOT / "graphify-out"
+GRAPH_AUDIT_MANIFEST = PACKET_DIR / "graph_audit_manifest.json"
+GRAPHIFY_FILES: dict[str, str] = {
+    "GRAPH_REPORT.md": "graph_audit_report.md",
+    "manifest.json": "graph_manifest.json",
+    "graph.json": "graph.json",
+}
+REQUIRED_GRAPHIFY_FILES = ("GRAPH_REPORT.md", "manifest.json")
 
 
 def _parse_test_command() -> list[str]:
@@ -234,6 +242,44 @@ def write_scoped_files_bundle() -> tuple[Path, Path]:
     return bundle_path, manifest_path
 
 
+def write_graph_audit_artifacts() -> tuple[list[Path], Path]:
+    """Copy graph audit artifacts into skeptic_packet and emit a presence manifest.
+
+    Why it exists: skeptic reviewers need a deterministic place to check whether
+    graph-based audit outputs were attached to this review packet, without
+    manually hunting through graphify-out/ or guessing which files exist.
+
+    Returns:
+        A tuple of (copied artifact paths, graph audit manifest path).
+    """
+    copied: list[Path] = []
+    graphify_detected = GRAPHIFY_OUT_DIR.exists() and GRAPHIFY_OUT_DIR.is_dir()
+
+    missing_required: list[str] = []
+    for source_name, target_name in GRAPHIFY_FILES.items():
+        source = GRAPHIFY_OUT_DIR / source_name
+        if source.is_file():
+            target = PACKET_DIR / target_name
+            shutil.copyfile(source, target)
+            copied.append(target)
+
+    if graphify_detected:
+        for source_name in REQUIRED_GRAPHIFY_FILES:
+            if not (GRAPHIFY_OUT_DIR / source_name).is_file():
+                missing_required.append(source_name)
+
+    manifest_payload = {
+        "graphify_detected": graphify_detected,
+        "required_when_detected": list(REQUIRED_GRAPHIFY_FILES),
+        "copied_artifacts": [str(path.relative_to(ROOT)) for path in copied],
+        "missing_required_artifacts": missing_required,
+    }
+    GRAPH_AUDIT_MANIFEST.write_text(
+        json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8"
+    )
+    return copied, GRAPH_AUDIT_MANIFEST
+
+
 def main() -> int:
     PACKET_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -248,6 +294,7 @@ def main() -> int:
     written_test, test_exit = write_test_output()
     written_diff = write_diff_artifact()
     written_bundle, written_manifest = write_scoped_files_bundle()
+    written_graph_artifacts, written_graph_manifest = write_graph_audit_artifacts()
 
     print("Skeptic packet updated:")
     print(f"- {written_spec.relative_to(ROOT)}")
@@ -256,6 +303,9 @@ def main() -> int:
     print(f"- {written_diff.relative_to(ROOT)}")
     print(f"- {written_bundle.relative_to(ROOT)}")
     print(f"- {written_manifest.relative_to(ROOT)}")
+    for artifact in written_graph_artifacts:
+        print(f"- {artifact.relative_to(ROOT)}")
+    print(f"- {written_graph_manifest.relative_to(ROOT)}")
     return 0
 
 

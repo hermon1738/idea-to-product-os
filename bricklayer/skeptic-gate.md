@@ -8,6 +8,11 @@ Use this gate before approving any Architect output. Do not skip.
 - `skeptic_packet/diff.patch` or `skeptic_packet/diff.txt` (patch/diff; prefer `git diff > skeptic_packet/diff.patch`)
 - `skeptic_packet/test_output.txt` (latest test output file)
 - `skeptic_packet/state_excerpt.json` (relevant `state.json` excerpt)
+- `skeptic_packet/graph_audit_manifest.json` (Graphify attachment status)
+
+If `skeptic_packet/graph_audit_manifest.json` has `graphify_detected: true`, these are also required:
+- `skeptic_packet/graph_audit_report.md`
+- `skeptic_packet/graph_manifest.json`
 
 If any required input is missing, return:
 - `Verdict: FAIL`
@@ -40,9 +45,11 @@ Required output:
 - What scenarios are missing from tests?
 - What edge cases are not covered?
 - What operational concerns are ignored (observability, rollback, migration)?
+- If Graphify attachments are present, what dependency or coupling risks were surfaced and ignored?
 
 Required output:
 - `Blind spots:` ...
+- `Graph audit findings:` ...
 
 ## 3) Long-Term Scaling Check
 
@@ -81,5 +88,6 @@ Required output:
 - `Could fail because: ...`
 - `Critical flaws: ...`
 - `Blind spots: ...`
+- `Graph audit findings: ...`
 - `Scaling risks: ...`
 - `Required fixes before PASS: ...`

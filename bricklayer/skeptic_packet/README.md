@@ -9,6 +9,12 @@ Required files:
 - `state_excerpt.json` (relevant excerpt from `state.json`)
 - `scoped_files_bundle.md` (full text content of all files listed in `spec.md` FILES scope when present)
 - `files_manifest.json` (explicit included/missing file list from scope)
+- `graph_audit_manifest.json` (whether Graphify outputs were detected and attached)
+
+Graph audit files (attached when `graphify-out/` exists):
+- `graph_audit_report.md` (from `graphify-out/GRAPH_REPORT.md`)
+- `graph_manifest.json` (from `graphify-out/manifest.json`)
+- `graph.json` (from `graphify-out/graph.json`, if present)
 
 Recommended diff command:
 - `git diff > skeptic_packet/diff.patch`

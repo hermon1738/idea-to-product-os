@@ -359,6 +359,46 @@ def test_auto_stage_skips_when_no_files(tmp_path: Path) -> None:
     mock_run.assert_not_called()
 
 
+def test_graph_audit_artifacts_copied_when_graphify_present(tmp_path: Path) -> None:
+    """Graphify outputs are copied into skeptic_packet and reflected in manifest."""
+    mod = _load_make_skeptic_packet()
+    graphify_out = tmp_path / "graphify-out"
+    packet_dir = tmp_path / "skeptic_packet"
+    graphify_out.mkdir(parents=True)
+    packet_dir.mkdir(parents=True)
+    (graphify_out / "GRAPH_REPORT.md").write_text("report", encoding="utf-8")
+    (graphify_out / "manifest.json").write_text('{"ok": true}', encoding="utf-8")
+    (graphify_out / "graph.json").write_text('{"nodes": []}', encoding="utf-8")
+
+    with patch.object(mod, "ROOT", tmp_path), patch.object(mod, "PACKET_DIR", packet_dir), patch.object(
+        mod, "GRAPHIFY_OUT_DIR", graphify_out
+    ), patch.object(mod, "GRAPH_AUDIT_MANIFEST", packet_dir / "graph_audit_manifest.json"):
+        copied, manifest = mod.write_graph_audit_artifacts()
+
+    copied_names = {path.name for path in copied}
+    assert copied_names == {"graph_audit_report.md", "graph_manifest.json", "graph.json"}
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert payload["graphify_detected"] is True
+    assert payload["missing_required_artifacts"] == []
+
+
+def test_graph_audit_manifest_written_when_graphify_missing(tmp_path: Path) -> None:
+    """Manifest is always emitted so skeptic can verify Graphify presence state."""
+    mod = _load_make_skeptic_packet()
+    packet_dir = tmp_path / "skeptic_packet"
+    packet_dir.mkdir(parents=True)
+
+    with patch.object(mod, "ROOT", tmp_path), patch.object(mod, "PACKET_DIR", packet_dir), patch.object(
+        mod, "GRAPHIFY_OUT_DIR", tmp_path / "graphify-out"
+    ), patch.object(mod, "GRAPH_AUDIT_MANIFEST", packet_dir / "graph_audit_manifest.json"):
+        copied, manifest = mod.write_graph_audit_artifacts()
+
+    assert copied == []
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert payload["graphify_detected"] is False
+    assert payload["copied_artifacts"] == []
+
+
 # ---------------------------------------------------------------------------
 # CliRunner integration
 # ---------------------------------------------------------------------------

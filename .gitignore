@@ -5,3 +5,13 @@ STATE.md
 HANDOFF.json
 .continue-here.md
 bricklayer.egg-info/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+graphify-out/.DS_Store
+graphify-out/wiki/.DS_Store
